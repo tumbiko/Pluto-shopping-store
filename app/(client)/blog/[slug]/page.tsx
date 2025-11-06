@@ -1,6 +1,5 @@
 // ...existing code...
 import Container from "@/components/Container";
-import { SINGLE_BLOG_QUERYResult } from "@/sanity.types";
 import { urlFor } from "@/sanity/lib/image";
 import {
   getBlogCategories,
@@ -15,12 +14,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import React from "react";
 
-const SingleBlogPage = async ({
-  params,
-}: {
-  params: { slug: string };
-}) => {
-  const { slug } = params;
+const SingleBlogPage = async (props: { params: Promise<{ slug: string }> }) => {
+  const { params } = props;
+  const { slug } = await params;
   const blog = await getSingleBlog(slug);
   if (!blog || Array.isArray(blog)) return notFound();
 
@@ -214,27 +210,27 @@ const BlogLeft = async ({ slug }: { slug: string }) => {
       <div className="border border-lightColor p-5 rounded-md mt-10">
         <h3 className="text-base">Latest Blogs</h3>
         <div className="space-y-4 mt-4">
-          {blogs?.map((blog: any, index: number) => (
-            <Link
-              href={`/blog/${blog?.slug?.current}`}
-              key={index}
-              className="flex items-center gap-2 group"
-            >
-              {blog?.mainImage && (
-                <Image
-                  src={urlFor(blog?.mainImage).url()}
-                  alt="blogImage"
-                  width={100}
-                  height={100}
-                  className="w-16 h-16 rounded-full object-cover border-[1px] border-shop_dark_green/10 group-hover:border-shop_dark_green hoverEffect"
-                />
-              )}
-              <p className="line-clamp-2 text-sm text-lightColor group-hover:text-shop_dark_green hoverEffect">
-                {blog?.title}
-              </p>
-            </Link>
-          ))}
-        </div>
++          {blogs?.map((blog, index: number) => (
+             <Link
+               href={`/blog/${blog?.slug?.current}`}
+               key={index}
+               className="flex items-center gap-2 group"
+             >
+               {blog?.mainImage && (
+                 <Image
+                   src={urlFor(blog?.mainImage).url()}
+                   alt="blogImage"
+                   width={100}
+                   height={100}
+                   className="w-16 h-16 rounded-full object-cover border-[1px] border-shop_dark_green/10 group-hover:border-shop_dark_green hoverEffect"
+                 />
+               )}
+               <p className="line-clamp-2 text-sm text-lightColor group-hover:text-shop_dark_green hoverEffect">
+                 {blog?.title}
+               </p>
+             </Link>
+           ))}
+         </div>
       </div>
     </div>
   );

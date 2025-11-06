@@ -4,6 +4,20 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { backendClient } from "@/sanity/lib/backendClient";
 
+
+
+type OrderProductItem = {
+  product?: { _ref?: string } | null;
+  quantity?: number | string | null;
+  [key: string]: unknown;
+};
+
+type OrderDoc = {
+  _id?: string;
+  products?: OrderProductItem[];
+  stock?: number;
+  [key: string]: unknown;
+};
 /**
  * PayChangu webhook route.
  *
@@ -21,10 +35,11 @@ import { backendClient } from "@/sanity/lib/backendClient";
  */
 
 // helper: query Sanity for an order by orderNumber (tx_ref)
-async function findOrderByNumber(orderNumber: string) {
+async function findOrderByNumber(orderNumber: string): Promise<OrderDoc | null> {
   try {
     const query = `*[_type == "order" && orderNumber == $orderNumber][0]`;
-    return await backendClient.fetch(query, { orderNumber });
+    const res = (await backendClient.fetch(query, { orderNumber })) as unknown;
+    return (res as OrderDoc) ?? null;
   } catch (err) {
     console.error("Error fetching order from sanity:", err);
     return null;
@@ -32,40 +47,49 @@ async function findOrderByNumber(orderNumber: string) {
 }
 
 // helper: update stock levels if order has products (expects products array with product._ref and quantity)
-async function updateStockLevelsFromOrder(order: any) {
+async function updateStockLevelsFromOrder(order: OrderDoc | null) {
   if (!order?.products || !Array.isArray(order.products)) return;
   for (const item of order.products) {
     try {
-      const productRef = item?.product?._ref;
-      const qty = typeof item.quantity === "number" ? item.quantity : Number(item?.quantity || 0);
+      const productRef =
+        item?.product && typeof item.product === "object"
+          ? (item.product as Record<string, unknown>)["_ref"] as string | undefined
+          : undefined;
+
+      const qtyRaw = item?.quantity;
+      const qty =
+        typeof qtyRaw === "number" ? qtyRaw : qtyRaw ? Number(qtyRaw) : 0;
+
       if (!productRef || qty <= 0) continue;
 
-      const product = await backendClient.getDocument(productRef);
-      if (!product || typeof product.stock !== "number") {
+      const product = (await backendClient.getDocument(productRef)) as unknown;
+      const productDoc = product as { stock?: number } | null;
+      if (!productDoc || typeof productDoc.stock !== "number") {
         console.warn(`Product ${productRef} not found or missing stock.`);
         continue;
       }
-      const newStock = Math.max(product.stock - qty, 0);
+      const newStock = Math.max(productDoc.stock - qty, 0);
       await backendClient.patch(productRef).set({ stock: newStock }).commit();
     } catch (err) {
       console.error("Failed to update product stock:", err);
     }
   }
 }
-
 // helper: create or patch an order in sanity based on verification data
-async function upsertOrderFromVerification(verifyData: any) {
-  // paychangu verify response sample: { status, message, data: { tx_ref, reference, amount, currency, charge_id, first_name, last_name, email, customization, ... } }
-  const data = verifyData?.data || verifyData;
-  const txRef = data?.tx_ref ?? data?.reference; // try both
-  const amount = data?.amount ?? null;
-  const currency = data?.currency ?? null;
-  const chargeId = data?.charge_id ?? data?.charge ?? null;
-  const customerName =
-    (data?.first_name || data?.last_name)
-      ? `${data?.first_name ?? ""} ${data?.last_name ?? ""}`.trim()
-      : (data?.customerName ?? null);
-  const email = data?.email ?? null;
+async function upsertOrderFromVerification(verifyData: unknown) {
+  const asRecord = (val: unknown): Record<string, unknown> =>
+    (typeof val === "object" && val !== null) ? (val as Record<string, unknown>) : {};
+
+  const dataRecord = (asRecord(verifyData).data ?? asRecord(verifyData)) as Record<string, unknown>;
+  const txRef = (dataRecord["tx_ref"] ?? dataRecord["reference"]) as string | undefined;
+  const amount = dataRecord["amount"] as number | string | undefined;
+  const currency = dataRecord["currency"] as string | undefined;
+  const chargeId = (dataRecord["charge_id"] ?? dataRecord["charge"]) as string | undefined;
+
+  const firstName = dataRecord["first_name"] as string | undefined;
+  const lastName = dataRecord["last_name"] as string | undefined;
+  const customerName = firstName || lastName ? `${firstName ?? ""} ${lastName ?? ""}`.trim() : (dataRecord["customerName"] as string | undefined);
+  const email = dataRecord["email"] as string | undefined;
 
   if (!txRef) {
     throw new Error("No tx_ref or reference found in verification data");
@@ -74,48 +98,44 @@ async function upsertOrderFromVerification(verifyData: any) {
   const existingOrder = await findOrderByNumber(txRef);
 
   if (existingOrder) {
-    // patch existing order
-    const patchData: any = {
+    const patchData: Record<string, unknown> = {
       status: "paid",
-      paychanguChargeId: chargeId ?? existingOrder.paychanguChargeId ?? null,
-      amountFromGateway: amount ?? existingOrder.amountFromGateway ?? null,
-      currency: currency ?? existingOrder.currency ?? null,
+      paychanguChargeId: chargeId ?? existingOrder["paychanguChargeId"] ?? null,
+      amountFromGateway: amount ?? existingOrder["amountFromGateway"] ?? null,
+      currency: currency ?? existingOrder["currency"] ?? null,
       paidAt: new Date().toISOString(),
     };
 
-    if (email && !existingOrder.email) patchData.email = email;
-    if (customerName && !existingOrder.customerName) patchData.customerName = customerName;
+    if (email && !existingOrder["email"]) patchData.email = email;
+    if (customerName && !existingOrder["customerName"]) patchData.customerName = customerName;
 
     try {
-      await backendClient.patch(existingOrder._id).set(patchData).commit();
+      await backendClient.patch(existingOrder._id as string).set(patchData).commit();
     } catch (err) {
       console.error("Error patching existing order:", err);
       throw err;
     }
 
-    // update stock if the order has product items
     await updateStockLevelsFromOrder(existingOrder);
 
     return { updated: true, orderId: existingOrder._id };
   } else {
-    // create minimal order record
-    const newOrder: any = {
+    const newOrder: { _type: "order"; [key: string]: unknown } = {
       _type: "order",
       orderNumber: txRef,
       paychanguChargeId: chargeId ?? null,
       customerName: customerName ?? null,
       email: email ?? null,
       currency: currency ?? null,
-      totalPrice: amount ?? null, // NOTE: PayChangu sample `amount` appears to be in units (not necessarily cents) — adjust if you know different.
+      totalPrice: amount ?? null,
       status: "paid",
       orderDate: new Date().toISOString(),
-      // products: [], // unknown here unless you stored products elsewhere
       verificationRaw: verifyData,
     };
 
     try {
       const created = await backendClient.create(newOrder);
-      return { created: true, orderId: created._id ?? created._id };
+      return { created: true, orderId: (created as { _id?: string })._id ?? null };
     } catch (err) {
       console.error("Error creating new order in sanity:", err);
       throw err;
@@ -139,10 +159,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Webhook secret not configured" }, { status: 500 });
   }
 
-  // compute HMAC SHA256 of raw payload
   const computed = crypto.createHmac("sha256", webhookSecret).update(body).digest("hex");
 
-  // Use a timing-safe comparison
   const sigBuffer = Buffer.from(sig, "utf8");
   const compBuffer = Buffer.from(computed, "utf8");
   const valid =
@@ -155,35 +173,32 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
-  // parse payload
-  let payload: any;
+  let payload: unknown;
   try {
-    payload = JSON.parse(body);
+    payload = JSON.parse(body) as unknown;
   } catch (err) {
     console.error("Failed to parse webhook JSON payload:", err);
     return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 });
   }
 
-  // expects payload to contain `reference` or `tx_ref` or data containing those
-  const txRef = payload?.tx_ref ?? payload?.reference ?? payload?.data?.tx_ref ?? payload?.data?.reference;
-  // if the event type indicates a payment or the payload status is success, verify via PayChangu API
-  const eventType = payload?.event_type ?? payload?.data?.event_type ?? null;
-  const status = payload?.status ?? payload?.data?.status ?? null;
+  const asRecord = (val: unknown): Record<string, unknown> =>
+    (typeof val === "object" && val !== null) ? (val as Record<string, unknown>) : {};
 
-  // If no txRef we cannot verify — bail out
+  const payloadRec = asRecord(payload);
+  const txRef = (payloadRec["tx_ref"] ?? payloadRec["reference"] ?? asRecord(payloadRec["data"])["tx_ref"] ?? asRecord(payloadRec["data"])["reference"]) as string | undefined;
+
   if (!txRef) {
     console.warn("Webhook payload missing tx_ref/reference. Payload:", payload);
     return NextResponse.json({ error: "Missing tx_ref/reference in payload" }, { status: 400 });
   }
 
-  // call PayChangu verify endpoint (recommended by docs) to confirm
   const secretKey = process.env.PAYCHANGU_SECRET_KEY;
   if (!secretKey) {
     console.error("PAYCHANGU_SECRET_KEY is not set");
     return NextResponse.json({ error: "Missing PayChangu secret key" }, { status: 500 });
   }
 
-  let verifyRespJson: any;
+  let verifyRespJson: unknown;
   try {
     const verifyRes = await fetch(`https://api.paychangu.com/verify-payment/${encodeURIComponent(txRef)}`, {
       method: "GET",
@@ -199,20 +214,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Failed to verify transaction with PayChangu" }, { status: 500 });
     }
 
-    verifyRespJson = await verifyRes.json();
+    verifyRespJson = await verifyRes.json() as unknown;
   } catch (err) {
     console.error("Error calling PayChangu verify endpoint:", err);
     return NextResponse.json({ error: "Error verifying transaction" }, { status: 500 });
   }
 
-  // check verification result - standard responses include status: "success" and data.status=== "success"
-  const verifyStatus = verifyRespJson?.status ?? verifyRespJson?.data?.status;
-  if (!verifyStatus || (typeof verifyStatus === "string" && !verifyStatus.toLowerCase().includes("success"))) {
+  const verifyRec = asRecord(verifyRespJson);
+  const verifyStatus = (verifyRec["status"] ?? asRecord(verifyRec["data"])["status"]) as string | undefined;
+  if (!verifyStatus || !verifyStatus.toLowerCase().includes("success")) {
     console.warn("Transaction verification did not return 'success':", verifyRespJson);
     return NextResponse.json({ error: "Transaction not successful" }, { status: 400 });
   }
 
-  // now upsert order in Sanity
   try {
     const result = await upsertOrderFromVerification(verifyRespJson);
     return NextResponse.json({ received: true, result });

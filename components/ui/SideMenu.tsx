@@ -1,12 +1,10 @@
-import React, { FC, use } from 'react'
+import React, { FC} from 'react'
 import Logo from './Logo';
 import { X } from 'lucide-react';
 import Link from 'next/link'
 import { headerData } from '@/constants/data';
 import { usePathname } from 'next/navigation';
 import SocialMedia from './SocialMedia';
-import { on } from 'events';
-import { useEffect, useRef } from 'react';
 import { useOutsideClick } from '@/hooks';
 
 interface SideBarProps{

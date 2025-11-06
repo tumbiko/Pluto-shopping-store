@@ -21,7 +21,7 @@ const socialMediaLinks = [
 
 ]
 
-const SocialMedia = ({className,iconClassName,tooltipClassName}: Props) => {
+const SocialMedia = ({className,iconClassName}: Props) => {
 
   return (
     <TooltipProvider>

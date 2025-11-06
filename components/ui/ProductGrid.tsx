@@ -1,6 +1,6 @@
 "use client";
 
-import React, { use, useEffect } from "react";
+import React from "react";
 import HomeTabBar from "./HomeTabBar";
 import { productType } from "@/constants/data";
 import { client } from "@/sanity/lib/client";
@@ -16,29 +16,34 @@ const ProductGrid = () => {
 
     const [products, setProducts] = React.useState<Product[]>([]);
     const [loading, setLoading] = React.useState(false);
-    const [error, setError] = React.useState(null);
     const [selectedTab, setSelectedTab] = React.useState(productType[0]?.title || '');
 
-    const query = `*[_type == "product" && variant == $variant] | order(name desc) {
-  ..., "categories" : categories[] -> title
-}`;
+    // moved query/params inside effect so lint won't complain about missing deps
+    React.useEffect(() => {
+      const query = `*[_type == "product" && variant == $variant] | order(name desc) {
+        ..., "categories" : categories[] -> title
+      }`;
+      const params = { variant: selectedTab.toLowerCase() };
 
-const params = { variant: selectedTab.toLowerCase() };
-useEffect(() => {
-  const fetchData = async () => {
-    setLoading(true);
-  try {
-    const response = await client.fetch(query, params);
-    setProducts(response);
-  } catch (error) {
-    console.error("Error fetching products:", error);
-    
-  }finally{
-    setLoading(false);
-  }
-  };
-  fetchData();
-}, [selectedTab]);
+      let mounted = true;
+      const fetchData = async () => {
+        setLoading(true);
+        try {
+          const response = await client.fetch(query, params);
+          if (!mounted) return;
+          setProducts(response);
+        } catch (error) {
+          console.error("Error fetching products:", error);
+        } finally {
+          if (mounted) setLoading(false);
+        }
+      };
+
+      fetchData();
+      return () => {
+        mounted = false;
+      };
+    }, [selectedTab]);
 
 
   return (

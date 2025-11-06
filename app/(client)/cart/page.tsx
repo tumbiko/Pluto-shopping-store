@@ -32,9 +32,9 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 
 
-const cartPage = () => {
+const CartPage = () => {
 
-const {
+  const {
     deleteCartProduct,
     getTotalPrice,
     getItemCount,
@@ -284,4 +284,4 @@ const {
   )
 }
 
-export default cartPage
+export default CartPage

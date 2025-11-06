@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/button";
 import Container from "@/components/ui/container";
 import HomeBanner from "@/components/ui/HomeBanner";
 import HomeCategories from "@/components/ui/HomeCategories";

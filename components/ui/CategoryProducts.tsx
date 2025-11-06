@@ -17,7 +17,7 @@ interface Props{
 const CategoryProducts = ({categories,slug}:Props) => {
 
     const [currentSlug, setCurrentSlug] = React.useState(slug);
-    const [products, setProducts] = React.useState([]);
+    const [products, setProducts] = React.useState<Product[]>([]);
    const handleCategoryChange = (newSlug: string) => {
     if (newSlug === currentSlug) return; // Prevent unnecessary updates
     setCurrentSlug(newSlug);
@@ -48,7 +48,7 @@ const CategoryProducts = ({categories,slug}:Props) => {
     useEffect(()=>{
         fetchProducts(currentSlug);
 
-    },[router]);
+    },[currentSlug]);
 
   return (
     <div className="py-5 flex flex-col md:flex-row items-start gap-5">
