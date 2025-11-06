@@ -38,7 +38,7 @@ const WishListProducts = () => {
           <table className='w-full border-collapse'>
             <thead className='border-b'>
               <tr className='bg-black/5'>
-                <th className="p-2 text-left">Image</th>
+                <th className="p-2 text-left">Product</th>
                 <th className="p-2 text-left hidden md:table-cell">Category</th>
                 <th className="p-2 text-left hidden md:table-cell">Type</th>
                 <th className="p-2 text-left hidden md:table-cell">Status</th>

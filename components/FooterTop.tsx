@@ -1,5 +1,6 @@
 import { Clock, Mail, MapPin, Phone } from "lucide-react";
 import React from "react";
+import Container from "./Container";
 
 interface ContactItemData {
   title: string;
@@ -31,7 +32,7 @@ const data: ContactItemData[] = [
   },
   {
     title: "Email Us",
-    subtitle: "vitumbikoshaba0@gmail.com",
+    subtitle: "vitumbiko2121 @gmail.com",
     icon: (
       <Mail className="h-6 w-6 text-gray-600 group-hover:text-primary transition-colors" />
     ),
@@ -40,11 +41,12 @@ const data: ContactItemData[] = [
 
 const FooterTop = () => {
   return (
+    <Container>
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-8 px-8 border-b">
       {data?.map((item, index) => (
         <div
           key={index}
-          className="flex items-center gap-3 group hover:bg-gray-50 p-4 transition-colors hoverEffect"
+          className="flex items-start gap-3 group hover:bg-gray-50 p-4 transition-colors hoverEffect min-h-16"
         >
           {item?.icon}
           <div>
@@ -58,6 +60,7 @@ const FooterTop = () => {
         </div>
       ))}
     </div>
+    </Container>
   );
 };
 

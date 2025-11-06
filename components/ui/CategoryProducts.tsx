@@ -59,7 +59,7 @@ const CategoryProducts = ({categories,slug}:Props) => {
     <Button
       onClick={() => handleCategoryChange(item?.slug?.current as string)}
       key={item?._id}
-      className={`w-full box-border min-h-[44px] md:w-full bg-transparent border border-transparent md:border-0 p-2 rounded text-darkColor shadow-none hover:bg-shop-dark-blue hover:text-white font-semibold transition-colors capitalize ${
+      className={`w-full box-border min-h-11 md:w-full bg-transparent border border-transparent md:border-0 p-2 rounded text-darkColor shadow-none hover:bg-shop-dark-blue hover:text-white font-semibold transition-colors capitalize ${
         item?.slug?.current === currentSlug ? 'bg-shop-dark-blue text-white' : ''
       }`}
     >

@@ -14,8 +14,9 @@ const home = async () => {
       <HomeBanner/>
       <div className="py-10">
         <ProductGrid/>
+        <HomeCategories categories={categories}/>
       </div>
-      <HomeCategories categories={categories}/>
+      
       <LatestBlog/>
     </Container>
   );
