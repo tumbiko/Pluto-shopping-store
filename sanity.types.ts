@@ -228,6 +228,7 @@ export type Product = {
     [internalGroqTypeReferenceTo]?: "brand";
   };
   status?: "new" | "hot" | "sale" | "fairly_used";
+  specifications?: string;
   variant?: "gadget" | "appliances" | "refrigerators" | "others";
   isFeatured?: boolean;
 };
@@ -298,7 +299,6 @@ export type Category = {
   description?: string;
   range?: number;
   featured?: boolean;
-  productCount?: number;
   image?: {
     asset?: {
       _ref: string;
@@ -524,7 +524,7 @@ export type LATEST_BLOG_QUERYResult = Array<{
   }>;
 }>;
 // Variable: DEAL_PRODUCTS
-// Query: *[_type == 'product' && status == 'hot'] | order(name asc){    ...,"categories": categories[]->title  }
+// Query: *[_type == 'product' && status == 'hot'] | order(name asc){    ...,    specifications,   // <--- add this    "categories": categories[]->title  }
 export type DEAL_PRODUCTSResult = Array<{
   _id: string;
   _type: "product";
@@ -558,11 +558,12 @@ export type DEAL_PRODUCTSResult = Array<{
     [internalGroqTypeReferenceTo]?: "brand";
   };
   status?: "fairly_used" | "hot" | "new" | "sale";
+  specifications: string | null;
   variant?: "appliances" | "gadget" | "others" | "refrigerators";
   isFeatured?: boolean;
 }>;
 // Variable: PRODUCT_BY_SLUG_QUERY
-// Query: *[_type == "product" && slug.current == $slug] | order(name asc) [0]
+// Query: *[_type == "product" && slug.current == $slug] | order(name asc) [0]{    ...,    specifications,   // <--- add this    "categories": categories[]->title,    "brandName": brand->title  }
 export type PRODUCT_BY_SLUG_QUERYResult = {
   _id: string;
   _type: "product";
@@ -587,13 +588,7 @@ export type PRODUCT_BY_SLUG_QUERYResult = {
   description?: string;
   price?: number;
   discount?: number;
-  categories?: Array<{
-    _ref: string;
-    _type: "reference";
-    _weak?: boolean;
-    _key: string;
-    [internalGroqTypeReferenceTo]?: "category";
-  }>;
+  categories: Array<null> | null;
   stock?: number;
   brand?: {
     _ref: string;
@@ -602,8 +597,10 @@ export type PRODUCT_BY_SLUG_QUERYResult = {
     [internalGroqTypeReferenceTo]?: "brand";
   };
   status?: "fairly_used" | "hot" | "new" | "sale";
+  specifications: string | null;
   variant?: "appliances" | "gadget" | "others" | "refrigerators";
   isFeatured?: boolean;
+  brandName: string | null;
 } | null;
 // Variable: BRAND_QUERY
 // Query: *[_type == "product" && slug.current == $slug]{  "brandName": brand->title  }
@@ -669,6 +666,7 @@ export type MY_ORDERS_QUERYResult = Array<{
         [internalGroqTypeReferenceTo]?: "brand";
       };
       status?: "fairly_used" | "hot" | "new" | "sale";
+      specifications?: string;
       variant?: "appliances" | "gadget" | "others" | "refrigerators";
       isFeatured?: boolean;
     } | null;
@@ -883,8 +881,8 @@ declare module "@sanity/client" {
   interface SanityQueries {
     "*[_type=='brand'] | order(name asc) ": BRANDS_QUERYResult;
     " *[_type == 'blog' && isLatest == true]|order(name asc){\n      ...,\n      blogcategories[]->{\n      title\n    }\n    }": LATEST_BLOG_QUERYResult;
-    "*[_type == 'product' && status == 'hot'] | order(name asc){\n    ...,\"categories\": categories[]->title\n  }": DEAL_PRODUCTSResult;
-    "*[_type == \"product\" && slug.current == $slug] | order(name asc) [0]": PRODUCT_BY_SLUG_QUERYResult;
+    "*[_type == 'product' && status == 'hot'] | order(name asc){\n    ...,\n    specifications,   // <--- add this\n    \"categories\": categories[]->title\n  }": DEAL_PRODUCTSResult;
+    "*[_type == \"product\" && slug.current == $slug] | order(name asc) [0]{\n    ...,\n    specifications,   // <--- add this\n    \"categories\": categories[]->title,\n    \"brandName\": brand->title\n  }": PRODUCT_BY_SLUG_QUERYResult;
     "*[_type == \"product\" && slug.current == $slug]{\n  \"brandName\": brand->title\n  }": BRAND_QUERYResult;
     "*[_type == 'order' && clerkUserId == $userId] | order(orderData desc){\n...,products[]{\n  ...,product->\n}\n}": MY_ORDERS_QUERYResult;
     "*[_type == 'blog'] | order(publishedAt desc)[0...$quantity]{\n  ...,  \n     blogcategories[]->{\n    title\n}\n    }\n  ": GET_ALL_BLOGResult;

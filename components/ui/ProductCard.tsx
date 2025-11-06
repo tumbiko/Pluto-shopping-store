@@ -41,7 +41,11 @@ const ProductCard = ({product}:{product: Product}) => {
     </div>
     <div className='p-3 flex flex-col gap-1 cursor-pointer shadow-md'>
       {product?.categories && <p className='text-xs text-gray-500 mb-1 capitalize line-clamp-1'>{product?.categories.map((cat)=>cat).join(", ")}</p>}
-      <h1 className='text-sm line-clamp-1 hover:line-clamp-none'>{product?.name}</h1>
+      <h1 className='text-sm line-clamp-1 hover:line-clamp-none'>
+        <Link href={`/product/${product?.slug?.current}`}>
+          {product?.name}
+        </Link>
+      </h1>
       <div className='flex items-center gap-2' >
         <div className='flex items-center gap-0.5'>
   {[...Array(5)].map((_, index) => {

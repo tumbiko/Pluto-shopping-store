@@ -1416,6 +1416,13 @@
         },
         "optional": true
       },
+      "specifications": {
+        "type": "objectAttribute",
+        "value": {
+          "type": "string"
+        },
+        "optional": true
+      },
       "variant": {
         "type": "objectAttribute",
         "value": {
