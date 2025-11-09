@@ -13,3 +13,6 @@ const WishListPage = async() => {
 }
 
 export default WishListPage
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+

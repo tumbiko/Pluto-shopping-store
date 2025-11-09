@@ -25,6 +25,7 @@
     "@sanity/image-url": "^1.2.0",
     "@sanity/vision": "^4.8.1",
     "@vercel/analytics": "^1.5.0",
+    "@vercel/stega": "^0.1.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dayjs": "^1.11.18",
