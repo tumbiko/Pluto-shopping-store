@@ -1,7 +1,6 @@
-// app/layout.tsx
+import './globals.css'
 import React from 'react';
 import { Toaster } from 'react-hot-toast';
-import './globals.css';
 import { Analytics } from '@vercel/analytics/next';
 
 const RootLayout = ({ children }: { children: React.ReactNode }) => {
