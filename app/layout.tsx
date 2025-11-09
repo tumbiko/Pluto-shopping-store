@@ -1,6 +1,7 @@
 // app/layout.tsx
 import React from 'react';
 import { Toaster } from 'react-hot-toast';
+import { Analytics } from '@vercel/analytics/next';
 
 const RootLayout = ({ children }: { children: React.ReactNode }) => {
   return (
@@ -9,7 +10,7 @@ const RootLayout = ({ children }: { children: React.ReactNode }) => {
         
         {/* Your app content */}
         {children}
-
+         <Analytics />
         {/* Toast notifications */}
         <Toaster
           position="bottom-right"
