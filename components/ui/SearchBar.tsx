@@ -142,7 +142,7 @@ const SearchBar = () => {
       {/* MOBILE: icon button (visible only < sm) */}
       <button
         type="button"
-        className="sm:hidden p-2 rounded-full bg-white shadow inline-flex items-center justify-center"
+        className="sm:hidden p-2 rounded-full bg-transparent inline-flex items-center justify-center"
         onClick={() => setOpen(true)}
         aria-label="Open search"
       >
