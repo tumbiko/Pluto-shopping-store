@@ -4,6 +4,7 @@ import {
   Metadata,
 } from '@/Actions/createCheckOutSession'
 import Container from "@/components/Container";
+import AddNewAddress from '@/components/ui/AddNewAddress';
 import AddToWishList from "@/components/ui/AddToWishListButton";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,27 +49,38 @@ const CartPage = () => {
   const [addresses, setAddresses] = useState<Address[] | null>(null);
   const [selectedAddress, setSelectedAddress] = useState<Address | null>(null);
 
-  const fetchAddresses = async() =>{
-    setLoading(true);
-    try {
-      const query = `*[_type=="address"] | order(publishedAt desc)`;
-      const data = await client.fetch(query);
-      setAddresses(data);
-      const defaultAddress = data.find((addr: Address) => addr.default);
-      if (defaultAddress) {
-        setSelectedAddress(defaultAddress);
-      } else if (data.length > 0) {
-        setSelectedAddress(data[0]); // Optional: select first address if no default
-      }
-    } catch (error) {
-      console.log("Address fetching error", error);
-    } finally{
-      setLoading(false)
+  console.log("user id: ",user?.id)
+
+  const fetchAddresses = async () => {
+  if (!user) return; // no user, no fetch
+  setLoading(true);
+  try {
+    // Fetch only addresses for this user
+    const query = `*[_type=="address" && userId == $userId] | order(publishedAt desc)`;
+    const data: Address[] = await client.fetch(query, { userId: user.id });
+    setAddresses(data);
+
+    // Automatically select default or first address
+    const defaultAddress = data.find(addr => addr.default);
+    if (defaultAddress) {
+      setSelectedAddress(defaultAddress);
+    } else if (data.length > 0) {
+      setSelectedAddress(data[0]);
+    } else {
+      setSelectedAddress(null); // No addresses yet
     }
+  } catch (error) {
+    console.error("Address fetching error", error);
+    setAddresses([]);
+    setSelectedAddress(null);
+  } finally {
+    setLoading(false);
   }
-  useEffect(() => {
-    fetchAddresses();
-  }, []);
+};
+useEffect(() => {
+  if (user) fetchAddresses();
+}, [user]);
+
 
   const handleResetCart = () => {
       const confirmed = window.confirm(
@@ -234,7 +246,7 @@ const CartPage = () => {
                             </div>
                           ))}
                         </RadioGroup>
-                        <Button variant={'outline'} className="w-full mt-4 cursor-pointer">Add New Address</Button>
+                        <AddNewAddress/>
                       </CardContent>
                     </Card>
                   </div> }

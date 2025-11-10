@@ -5,5 +5,6 @@ import shop from "./banner/shop.jpg";
 import unnamed from "./banner/unnamed.png";
 import yeah from "./banner/yeah.jpg";
 import emptyStuff from "./banner/emptyStuff.jpg";
-export { paypalLogo, emptyCart, banner_1, shop, unnamed, yeah, emptyStuff };
+import noaddress from "./noaddress.jpg"
+export { paypalLogo, emptyCart, banner_1, shop, unnamed, yeah, emptyStuff,noaddress };
 

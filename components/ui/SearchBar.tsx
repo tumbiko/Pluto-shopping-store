@@ -150,7 +150,7 @@ const SearchBar = () => {
       </button>
 
       {/* DESKTOP: full search visible from sm and up */}
-      <div className="hidden sm:flex items-center bg-white border rounded-full px-3 py-1 w-64 lg:w-96">
+      <div className="hidden sm:flex items-center bg-white border rounded-full px-3 py-1 w-64 lg:w-70">
         <Search className="w-5 h-5 text-gray-400 mr-2" />
         <input
           ref={inputRef}
