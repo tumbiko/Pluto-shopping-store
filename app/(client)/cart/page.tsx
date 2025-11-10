@@ -117,10 +117,17 @@ useEffect(() => {
       {isSignedIn ? ( 
         <Container>
             {groupedItems?.length ? <>
-            <div className="flex items-center gap-2 py-5">
-              <ShoppingBag/>
-              <h1 className="font-bold text-2xl">Your Cart</h1>
-            </div>
+            <div className="flex items-center justify-between py-5">
+  <div className="flex items-center gap-2">
+    <ShoppingBag />
+    <h1 className="font-bold text-2xl">Your Cart</h1>
+  </div>
+
+  {/* Show AddNewAddress on all devices, visible especially for mobile */}
+  <div className="md:hidden">
+    <AddNewAddress />
+  </div>
+</div>
             <div className="grid lg:grid-cols-3 md:gap-8">
               <div className="lg:col-span-2 rounded-lg ">
                 <div className="border bg-white rounded-md">
@@ -253,39 +260,47 @@ useEffect(() => {
                 </div>
               </div>
               {/* Order Summary for Mobile */}
-              <div className="md:hidden fixed bottom-0 left-0 w-full bg-white pt-2">
-                  <div className="bg-white p-4 rounded-lg border mx-4">
-                    <h2>Order Summary</h2>
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span>SubTotal</span>
-                        <PriceFormatter amount={getSubTotalPrice()} />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span>Discount</span>
-                        <PriceFormatter
-                          amount={getSubTotalPrice() - getTotalPrice()}
-                        />
-                      </div>
-                      <Separator />
-                      <div className="flex items-center justify-between font-semibold text-lg">
-                        <span>Total</span>
-                        <PriceFormatter
-                          amount={getTotalPrice()}
-                          className="text-lg font-bold text-black"
-                        />
-                      </div>
-                      <Button
-                        className="w-full rounded-full font-semibold tracking-wide hoverEffect"
-                        size="lg"
-                        disabled={loading}
-                        onClick={handleCheckout}
-                      >
-                        {loading ? "Please wait..." : "Proceed to Checkout"}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
+<div className="md:hidden fixed bottom-0 left-0 w-full bg-white pt-2">
+  <div className="bg-white p-4 rounded-lg border mx-4 space-y-3">
+    <h2>Order Summary</h2>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <span>SubTotal</span>
+        <PriceFormatter amount={getSubTotalPrice()} />
+      </div>
+      <div className="flex items-center justify-between">
+        <span>Discount</span>
+        <PriceFormatter
+          amount={getSubTotalPrice() - getTotalPrice()}
+        />
+      </div>
+      <Separator />
+      <div className="flex items-center justify-between font-semibold text-lg">
+        <span>Total</span>
+        <PriceFormatter
+          amount={getTotalPrice()}
+          className="text-lg font-bold text-black"
+        />
+      </div>
+    </div>
+    {/* Set Address Button for mobile if no address selected */}
+    {!selectedAddress && (
+      <AddNewAddress/>
+    )}
+    {/* Checkout Button */}
+    {selectedAddress && (
+      <Button
+        className="w-full rounded-full font-semibold tracking-wide hoverEffect"
+        size="lg"
+        disabled={loading}
+        onClick={handleCheckout}
+      >
+        {loading ? "Please wait..." : "Proceed to Checkout"}
+      </Button>
+    )}
+  </div>
+</div>
+
             </div>
             </> : <EmptyCart/>}
         </Container> ) : (

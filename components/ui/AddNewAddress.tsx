@@ -8,9 +8,9 @@ const AddNewAddress = () => {
     <Link href="/add-new-address" className="w-full">
       <Button
         variant="outline"
-        className="w-full mt-2 font-semibold tracking-wide cursor-pointer"
+        className="w-full mt-2 font-semibold tracking-wide cursor-pointer text-white rounded-full bg-shop-dark-yellow/80 hover:text-white hover:bg-shop-dark-yellow"
       >
-        Add New Address
+        Select Address
       </Button>
     </Link>
   )
