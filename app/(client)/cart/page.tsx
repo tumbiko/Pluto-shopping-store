@@ -89,7 +89,7 @@ const handleCheckout = async () => {
   setLoading(true);
 
   try {
-    // Normalize phone number to 9-digit format for PayChangu
+    // Normalize phone number to PayChangu format: +265XXXXXXXXX
     let phone = selectedAddress.phone?.toString().trim();
 
     if (!phone) {
@@ -97,21 +97,18 @@ const handleCheckout = async () => {
       return;
     }
 
-    // Remove +265 if present
-    if (phone.startsWith("+265")) {
-      phone = phone.slice(4);
+    // Ensure it starts with +265
+    if (!phone.startsWith("+265")) {
+      // Remove leading 0 if present
+      if (phone.startsWith("0")) phone = phone.slice(1);
+      phone = `+265${phone}`;
     }
 
-    // Remove leading 0 if present
-    if (phone.startsWith("0")) {
-      phone = phone.slice(1);
-    }
-
-    // Final payload with amount, email, and 9-digit mobile
+    // Build payload
     const payload = {
       amount: getTotalPrice(),
       email: user.emailAddresses[0].emailAddress,
-      mobile: phone, // exactly 9 digits
+      mobile: phone, // +265XXXXXXXXX
     };
 
     // Debug logs
