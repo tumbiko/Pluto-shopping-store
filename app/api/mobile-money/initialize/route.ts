@@ -5,13 +5,12 @@ export async function POST(req: Request) {
     const body = await req.json();
 
     const payload = {
-      mobile: body.phone,
+   
       amount: String(body.amount),
       charge_id: crypto.randomUUID(),
       mobile_money_operator_ref_id: "20be6c20-adeb-4b5b-a7ba-0769820df4fb",
       email: body.email,
-      first_name: body.firstName,
-      last_name: body.lastName,
+     
     };
 
     const res = await fetch("https://api.paychangu.com/mobile-money/payments/initialize", {

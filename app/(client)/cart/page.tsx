@@ -1,8 +1,5 @@
 'use client'
-import {
-  createPayChanguCheckoutSession as createCheckoutSession,
-  Metadata,
-} from '@/Actions/createCheckOutSession'
+import crypto from "crypto";
 import Container from "@/components/Container";
 import AddNewAddress from '@/components/ui/AddNewAddress';
 import AddToWishList from "@/components/ui/AddToWishListButton";
@@ -77,14 +74,13 @@ const CartPage = () => {
     }
   };
 
- const handleCheckout = async () => {
-  // Ensure address is selected
+
+const handleCheckout = async () => {
   if (!selectedAddress) {
     toast.error("Please select an address first.");
     return;
   }
 
-  // Ensure user has an email for notifications
   if (!user?.emailAddresses?.[0]?.emailAddress) {
     toast.error("Please add an email to your profile for payment notifications.");
     return;
@@ -93,10 +89,11 @@ const CartPage = () => {
   setLoading(true);
 
   try {
-    // Only send fields PayChangu expects
     const payload = {
-      amount: getTotalPrice(), // required
-      email: user.emailAddresses[0].emailAddress, // optional for notifications
+      amount: getTotalPrice(),
+      charge_id: crypto.randomUUID(),
+      mobile_money_operator_ref_id: "20be6c20-adeb-4b5b-a7ba-0769820df4fb",
+      email: user.emailAddresses[0].emailAddress,
     };
 
     console.log("💳 Checkout payload:", payload);
@@ -119,9 +116,6 @@ const CartPage = () => {
       "Payment request sent. Please approve the charge on your phone."
     );
 
-    // Optionally: save the order + selectedAddress in your DB here
-    // await saveOrderToDB({ items: groupedItems, amount: payload.amount, address: selectedAddress, transactionRef: data.charge_id });
-
   } catch (error) {
     console.error("❌ Checkout error:", error);
     toast.error("Something went wrong.");
@@ -129,6 +123,7 @@ const CartPage = () => {
     setLoading(false);
   }
 };
+
 
 
 
