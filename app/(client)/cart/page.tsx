@@ -75,7 +75,6 @@ const CartPage = () => {
     }
   };
 
-
 const handleCheckout = async () => {
   if (!selectedAddress) {
     toast.error("Please select an address first.");
@@ -90,7 +89,7 @@ const handleCheckout = async () => {
   setLoading(true);
 
   try {
-    // Ensure phone is in E.164 format (+CountryCodeNumber)
+    // Normalize phone number to 9-digit format for PayChangu
     let phone = selectedAddress.phone?.toString().trim();
 
     if (!phone) {
@@ -98,18 +97,24 @@ const handleCheckout = async () => {
       return;
     }
 
-    // Prepend +265 if missing (example: Malawi numbers)
-    if (!phone.startsWith("+")) {
-      phone = `+265${phone.replace(/^0/, "")}`; // remove leading 0 if present
+    // Remove +265 if present
+    if (phone.startsWith("+265")) {
+      phone = phone.slice(4);
     }
 
+    // Remove leading 0 if present
+    if (phone.startsWith("0")) {
+      phone = phone.slice(1);
+    }
+
+    // Final payload with amount, email, and 9-digit mobile
     const payload = {
       amount: getTotalPrice(),
       email: user.emailAddresses[0].emailAddress,
-      mobile: phone,
+      mobile: phone, // exactly 9 digits
     };
 
-    // ✅ Debug log to check the number
+    // Debug logs
     console.log("📌 Phone being sent to PayChangu:", phone);
     console.log("💳 Checkout payload:", payload);
 
@@ -138,6 +143,7 @@ const handleCheckout = async () => {
     setLoading(false);
   }
 };
+
 
   return (
     <div className='bg-gray-50 dark:bg-[#121212] pb-52 md:pb-10 transition-colors duration-300'>
