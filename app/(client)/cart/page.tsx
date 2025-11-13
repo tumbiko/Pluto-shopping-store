@@ -28,6 +28,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 
+
+
 const CartPage = () => {
   const {
     deleteCartProduct,
@@ -88,12 +90,27 @@ const handleCheckout = async () => {
   setLoading(true);
 
   try {
-    // Only send fields PayChangu expects minus charge_id
+    // Ensure phone is in E.164 format (+CountryCodeNumber)
+    let phone = selectedAddress.phone?.toString().trim();
+
+    if (!phone) {
+      toast.error("Selected address does not have a valid phone number.");
+      return;
+    }
+
+    // Prepend +265 if missing (example: Malawi numbers)
+    if (!phone.startsWith("+")) {
+      phone = `+265${phone.replace(/^0/, "")}`; // remove leading 0 if present
+    }
+
     const payload = {
       amount: getTotalPrice(),
       email: user.emailAddresses[0].emailAddress,
+      mobile: phone,
     };
 
+    // ✅ Debug log to check the number
+    console.log("📌 Phone being sent to PayChangu:", phone);
     console.log("💳 Checkout payload:", payload);
 
     const res = await fetch("/api/paychangu/mobile-money", {
@@ -105,8 +122,8 @@ const handleCheckout = async () => {
     const data = await res.json();
     console.log("📤 PayChangu API response:", data, res.status);
 
-    if (!res.ok) {
-      toast.error(data.error || "Payment failed to start.");
+    if (!res.ok || data.status === "failed") {
+      toast.error(data.message?.mobile?.[0] || data.error || "Payment failed to start.");
       return;
     }
 
@@ -121,7 +138,6 @@ const handleCheckout = async () => {
     setLoading(false);
   }
 };
-
 
   return (
     <div className='bg-gray-50 dark:bg-[#121212] pb-52 md:pb-10 transition-colors duration-300'>
