@@ -27,7 +27,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-
+import { v4 as uuidv4 } from "uuid";
 
 
 const CartPage = () => {
@@ -94,21 +94,36 @@ const handleCheckout = async () => {
 
     if (!phone) {
       toast.error("Selected address does not have a valid phone number.");
+      setLoading(false);
       return;
     }
 
     // Ensure it starts with +265
     if (!phone.startsWith("+265")) {
-      // Remove leading 0 if present
       if (phone.startsWith("0")) phone = phone.slice(1);
       phone = `+265${phone}`;
     }
 
+    // Optional: validate format
+    if (!/^\+265\d{9}$/.test(phone)) {
+      toast.error("Please enter a valid mobile number in the format +265XXXXXXXXX");
+      setLoading(false);
+      return;
+    }
+
+    // Use address name as first_name, leave last_name empty (or split if you want)
+    const firstName = selectedAddress.name || "Customer";
+    const lastName = ""; // optional
+
     // Build payload
     const payload = {
-      amount: getTotalPrice(),
-      email: user.emailAddresses[0].emailAddress,
       mobile: phone, // +265XXXXXXXXX
+      mobile_money_operator_ref_id: "20be6c20-adeb-4b5b-a7ba-0769820df4fb", // default operator
+      amount: getTotalPrice().toString(), // must be string
+      charge_id: uuidv4(), // unique transaction ID
+      email: user.emailAddresses[0].emailAddress,
+      first_name: firstName,
+      last_name: lastName,
     };
 
     // Debug logs
@@ -140,7 +155,6 @@ const handleCheckout = async () => {
     setLoading(false);
   }
 };
-
 
   return (
     <div className='bg-gray-50 dark:bg-[#121212] pb-52 md:pb-10 transition-colors duration-300'>
