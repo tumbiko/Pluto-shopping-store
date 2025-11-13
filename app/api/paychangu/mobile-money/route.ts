@@ -6,25 +6,26 @@ export async function POST(req: Request) {
     const body = await req.json();
     console.log("📲 /mobile-money received payload:", body);
 
-    // Check required fields
-    if (!body.phone || !body.amount || !body.email || !body.firstName || !body.lastName) {
-      console.warn("⚠️ Missing required fields in payload");
+    // Check required field
+    if (!body.amount) {
+      console.warn("⚠️ Missing required field: amount");
       return NextResponse.json(
-        { error: "Missing required fields" },
+        { error: "Missing required field: amount" },
         { status: 400 }
       );
     }
 
-    // Prepare payload for PayChangu
-    const payload = {
-      mobile: body.phone,
+    // Build payload for PayChangu
+    const payload: Record<string, string> = {
       amount: String(body.amount),
       charge_id: crypto.randomUUID(),
-      mobile_money_operator_ref_id: "20be6c20-adeb-4b5b-a7ba-0769820df4fb", // Replace with your real operator ID if needed
-      email: body.email,
-      first_name: body.firstName,
-      last_name: body.lastName,
+      mobile_money_operator_ref_id: "20be6c20-adeb-4b5b-a7ba-0769820df4fb",
     };
+
+    // Optionally include email for notifications
+    if (body.email) {
+      payload.email = body.email;
+    }
 
     console.log("💳 Sending to PayChangu:", payload);
 
@@ -50,7 +51,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // Success
     return NextResponse.json(data);
   } catch (error) {
     console.error("❌ /mobile-money API error:", error);

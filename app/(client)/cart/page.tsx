@@ -77,30 +77,37 @@ const CartPage = () => {
     }
   };
 
-  const handleCheckout = async () => {
+ const handleCheckout = async () => {
   if (!selectedAddress) {
     toast.error("Please select an address first.");
+    return;
+  }
+
+  if (!user?.emailAddresses?.[0]?.emailAddress) {
+    toast.error("Please add an email to your profile for payment notifications.");
     return;
   }
 
   setLoading(true);
 
   try {
+    // Build the payload
+    const payload = {
+      amount: getTotalPrice(),
+      email: user.emailAddresses[0].emailAddress, // optional but recommended
+      address: selectedAddress, // optional: for your order records
+    };
+
+    console.log("💳 Checkout payload:", payload);
+
     const res = await fetch("/api/paychangu/mobile-money", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        items: groupedItems,
-        amount: getTotalPrice(),
-        phone: user?.phoneNumbers?.[0]?.phoneNumber,
-        email: user?.emailAddresses?.[0]?.emailAddress,
-        firstName: user?.firstName,
-        lastName: user?.lastName,
-        address: selectedAddress,
-      }),
+      body: JSON.stringify(payload),
     });
 
     const data = await res.json();
+    console.log("📤 PayChangu API response:", data, res.status);
 
     if (!res.ok) {
       toast.error(data.error || "Payment failed to start.");
@@ -111,12 +118,13 @@ const CartPage = () => {
       "Payment request sent. Please approve the charge on your phone."
     );
   } catch (error) {
-    console.error(error);
+    console.error("❌ Checkout error:", error);
     toast.error("Something went wrong.");
   } finally {
     setLoading(false);
   }
 };
+
 
   return (
     <div className='bg-gray-50 dark:bg-[#121212] pb-52 md:pb-10 transition-colors duration-300'>
