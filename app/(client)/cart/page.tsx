@@ -78,11 +78,13 @@ const CartPage = () => {
   };
 
  const handleCheckout = async () => {
+  // Ensure address is selected
   if (!selectedAddress) {
     toast.error("Please select an address first.");
     return;
   }
 
+  // Ensure user has an email for notifications
   if (!user?.emailAddresses?.[0]?.emailAddress) {
     toast.error("Please add an email to your profile for payment notifications.");
     return;
@@ -91,11 +93,10 @@ const CartPage = () => {
   setLoading(true);
 
   try {
-    // Build the payload
+    // Only send fields PayChangu expects
     const payload = {
-      amount: getTotalPrice(),
-      email: user.emailAddresses[0].emailAddress, // optional but recommended
-      address: selectedAddress, // optional: for your order records
+      amount: getTotalPrice(), // required
+      email: user.emailAddresses[0].emailAddress, // optional for notifications
     };
 
     console.log("💳 Checkout payload:", payload);
@@ -117,6 +118,10 @@ const CartPage = () => {
     toast.success(
       "Payment request sent. Please approve the charge on your phone."
     );
+
+    // Optionally: save the order + selectedAddress in your DB here
+    // await saveOrderToDB({ items: groupedItems, amount: payload.amount, address: selectedAddress, transactionRef: data.charge_id });
+
   } catch (error) {
     console.error("❌ Checkout error:", error);
     toast.error("Something went wrong.");
@@ -124,6 +129,7 @@ const CartPage = () => {
     setLoading(false);
   }
 };
+
 
 
   return (
