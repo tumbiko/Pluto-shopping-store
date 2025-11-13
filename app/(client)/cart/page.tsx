@@ -1,5 +1,4 @@
 'use client'
-import crypto from "crypto";
 import Container from "@/components/Container";
 import AddNewAddress from '@/components/ui/AddNewAddress';
 import AddToWishList from "@/components/ui/AddToWishListButton";
@@ -89,10 +88,9 @@ const handleCheckout = async () => {
   setLoading(true);
 
   try {
+    // Only send fields PayChangu expects minus charge_id
     const payload = {
       amount: getTotalPrice(),
-      charge_id: crypto.randomUUID(),
-      mobile_money_operator_ref_id: "20be6c20-adeb-4b5b-a7ba-0769820df4fb",
       email: user.emailAddresses[0].emailAddress,
     };
 
@@ -123,8 +121,6 @@ const handleCheckout = async () => {
     setLoading(false);
   }
 };
-
-
 
 
   return (
