@@ -15,14 +15,13 @@ const CategoryList = ({
   setSelectedCategory,
 }: Props) => {
   return (
-    <div className="w-full bg-white p-5 mt-3">
-      <h2 className="text-base font-black">Product Categories</h2>
-      <RadioGroup value={selectedCategory || ""} className="mt-2 space-y-1 ">
+    <div className="w-full bg-white dark:bg-[#121212] p-5 mt-3 transition-colors duration-300">
+      <h2 className="text-base font-black text-black dark:text-white">Product Categories</h2>
+
+      <RadioGroup value={selectedCategory || ""} className="mt-2 space-y-1">
         {categories?.map((category) => (
           <div
-            onClick={() => {
-              setSelectedCategory(category?.slug?.current as string);
-            }}
+            onClick={() => setSelectedCategory(category?.slug?.current as string)}
             key={category?._id}
             className="flex items-center space-x-2 cursor-pointer"
           >
@@ -33,17 +32,22 @@ const CategoryList = ({
             />
             <Label
               htmlFor={category?.slug?.current}
-              className={`${selectedCategory === category?.slug?.current ? "font-semibold text-shop-dark-yellow" : "font-normal"}`}
+              className={`
+                ${selectedCategory === category?.slug?.current
+                  ? "font-semibold text-shop-dark-yellow"
+                  : "font-normal text-gray-700 dark:text-gray-300"
+                } transition-colors duration-300`}
             >
               {category?.name}
             </Label>
           </div>
         ))}
       </RadioGroup>
+
       {selectedCategory && (
         <button
           onClick={() => setSelectedCategory(null)}
-          className="text-sm font-medium mt-2 underline underline-offset-2 decoration-[1px] hover:text-shop-dark-yellow hoverEffect text-left"
+          className="text-sm font-medium mt-2 underline underline-offset-2 decoration-1 hover:text-shop-dark-yellow dark:hover:text-shop-golden hoverEffect text-left transition-colors duration-300"
         >
           Reset selection
         </button>

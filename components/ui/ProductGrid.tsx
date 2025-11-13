@@ -35,7 +35,6 @@ const ProductGrid = () => {
         console.log('ProductGrid fetch result:', response?.length, 'for tab:', selectedTab);
         if (!mounted) return;
 
-        // fallback: if empty and not "all", try fetch all so UI shows something (optional)
         if ((!response || response.length === 0) && selected !== 'all') {
           console.warn('No products for selected filter — fetching all as fallback');
           const all = await client.fetch(`*[_type == "product"]{..., "categories": categories[]->title} | order(name desc)`);
@@ -58,11 +57,12 @@ const ProductGrid = () => {
 
   return (
     <div>
-      <HomeTabBar selectedTab={selectedTab} onTabSelect={setSelectedTab}/>
+      <HomeTabBar selectedTab={selectedTab} onTabSelect={setSelectedTab} />
+
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-10 min-h-80 bg-gray-100 w-full mt-5">
-          <div className="space-x-2 flex items-center text-gray-500">
-            <Loader2 className="w-5 h-6 animate-spin"/>
+        <div className="flex flex-col items-center justify-center py-10 min-h-80 w-full mt-5 bg-gray-100 dark:bg-[#1a1a1a] transition-colors duration-300">
+          <div className="space-x-2 flex items-center text-gray-500 dark:text-gray-300">
+            <Loader2 className="w-5 h-6 animate-spin" />
             <span>products are loading...</span>
           </div>
         </div>
@@ -70,14 +70,16 @@ const ProductGrid = () => {
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5 mt-10">
           {products.map((product) => (
             <AnimatePresence key={product?._id}>
-              <motion.div layout initial={{opacity:0.2}} animate={{opacity:1}} exit={{opacity:0}}>
-                <ProductCard product={product}/>
+              <motion.div layout initial={{ opacity: 0.2 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                <ProductCard product={product} />
               </motion.div>
             </AnimatePresence>
           ))}
         </div>
       ) : (
-        <NoProductAvailable selectedTab={selectedTab}/>
+        <div className="mt-10">
+          <NoProductAvailable selectedTab={selectedTab} className="text-gray-600 dark:text-gray-300" />
+        </div>
       )}
     </div>
   );

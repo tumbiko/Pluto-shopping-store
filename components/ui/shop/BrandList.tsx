@@ -9,10 +9,11 @@ interface Props {
   setSelectedBrand: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
-const brandList = ({ brands, selectedBrand, setSelectedBrand }: Props) => {
+const BrandList = ({ brands, selectedBrand, setSelectedBrand }: Props) => {
   return (
-    <div className="w-full bg-white p-1">
-      <h2 className="text-base font-black">Brand Categories</h2>
+    <div className="w-full bg-white dark:bg-[#121212] p-5 transition-colors duration-300">
+      <h2 className="text-base font-black text-black dark:text-white">Brand Categories</h2>
+
       <RadioGroup value={selectedBrand || ""} className="mt-2 space-y-1">
         {brands?.map((brand) => (
           <div
@@ -27,16 +28,21 @@ const brandList = ({ brands, selectedBrand, setSelectedBrand }: Props) => {
             />
             <Label
               htmlFor={brand?.slug?.current}
-              className={`${selectedBrand === brand?.slug?.current ? "font-semibold text-shop_dark_green" : "font-normal"}`}
+              className={`${
+                selectedBrand === brand?.slug?.current
+                  ? "font-semibold text-shop_dark_green"
+                  : "font-normal text-gray-700 dark:text-gray-300"
+              } transition-colors duration-300`}
             >
               {brand?.title}
             </Label>
           </div>
         ))}
+
         {selectedBrand && (
           <button
             onClick={() => setSelectedBrand(null)}
-            className="text-sm font-medium mt-2 underline underline-offset-2 decoration-[1px] hover:text-shop-dark-yellow hoverEffect text-left"
+            className="text-sm font-medium mt-2 underline underline-offset-2 decoration-[1px] hover:text-shop-dark-yellow dark:hover:text-shop-golden hoverEffect text-left transition-colors duration-300"
           >
             Reset selection
           </button>
@@ -46,4 +52,4 @@ const brandList = ({ brands, selectedBrand, setSelectedBrand }: Props) => {
   )
 }
 
-export default brandList
+export default BrandList;

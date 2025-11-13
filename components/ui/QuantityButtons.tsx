@@ -11,8 +11,8 @@ interface Props {
   className?: string;
 }
 
-const QuantityButtons = ({product,className}:Props ) => {
-    const { addItem, removeItem, getItemCount } = useStore();
+const QuantityButtons = ({ product, className }: Props) => {
+  const { addItem, removeItem, getItemCount } = useStore();
   const itemCount = getItemCount(product?._id);
   const isOutOfStock = product?.stock === 0;
 
@@ -35,13 +35,29 @@ const QuantityButtons = ({product,className}:Props ) => {
   };
 
   return (
-    <div className={cn("flex items-center gap-1 pb-1 text-base",className)}>
-      <Button onClick={handleRemoveProduct} variant="outline" size="icon" disabled={itemCount===0 || isOutOfStock} className="w-6 h-6 border-[1px] hover:bg-shop-dark-yellow/20 hoverEffect">
-        <Minus/>
+    <div className={cn("flex items-center gap-1 pb-1 text-base", className)}>
+      <Button
+        onClick={handleRemoveProduct}
+        variant="outline"
+        size="icon"
+        disabled={itemCount === 0 || isOutOfStock}
+        className="w-6 h-6 border-[1px] border-gray-300 dark:border-gray-600 hover:bg-shop-dark-yellow/20 dark:hover:bg-shop-golden/20 hoverEffect transition-colors duration-300"
+      >
+        <Minus className="text-black dark:text-gray-200"/>
       </Button>
-      <span className='font-semibold text-sm w-6 text-center text-black'>{itemCount}</span>
-      <Button onClick={handleAddToCart} variant="outline" size="icon" disabled={isOutOfStock} className="w-6 h-6 border-[1px] hover:bg-shop-dark-yellow/20 hoverEffect">
-        <Plus/>
+
+      <span className="font-semibold text-sm w-6 text-center text-black dark:text-gray-200">
+        {itemCount}
+      </span>
+
+      <Button
+        onClick={handleAddToCart}
+        variant="outline"
+        size="icon"
+        disabled={isOutOfStock}
+        className="w-6 h-6 border-[1px] border-gray-300 dark:border-gray-600 hover:bg-shop-dark-yellow/20 dark:hover:bg-shop-golden/20 hoverEffect transition-colors duration-300"
+      >
+        <Plus className="text-black dark:text-gray-200"/>
       </Button>
     </div>
   )

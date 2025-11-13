@@ -52,25 +52,49 @@ const CategoryProducts = ({categories,slug}:Props) => {
 
   return (
     <div className="py-5 flex flex-col md:flex-row items-start gap-5">
-   <div className="border gap-2 
-                grid grid-cols-4 sm:grid-cols-4 
-                md:flex md:flex-col md:min-w-40 md:gap-0 justify-start">
-  {categories?.map((item) => (
-    <Button
-      onClick={() => handleCategoryChange(item?.slug?.current as string)}
-      key={item?._id}
-      className={`w-full box-border min-h-11 md:w-full bg-transparent border border-transparent md:border-0 p-2 rounded text-darkColor shadow-none hover:bg-shop-dark-blue hover:text-white font-semibold transition-colors capitalize ${
-        item?.slug?.current === currentSlug ? 'bg-shop-dark-blue text-white' : ''
-      }`}
-    >
-      <span className="block text-sm leading-snug whitespace-normal break-words">
-        {item?.name}
-      </span>
-    </Button>
-  ))}
-</div>
+      {/* ---------- CATEGORIES (responsive) ---------- */}
+      <aside className="w-full md:w-auto">
+        {/* Desktop / tablet: vertical list */}
+        <div className="hidden md:flex md:flex-col md:min-w-[10rem] md:gap-0 border rounded-md overflow-hidden">
+          {categories?.map((item) => (
+            <Button
+              onClick={() => handleCategoryChange(item?.slug?.current as string)}
+              key={item?._id}
+              className={`w-full box-border min-h-11 md:w-full bg-transparent border border-transparent md:border-0 p-2 rounded text-darkColor shadow-none hover:bg-shop-dark-blue hover:text-white font-semibold transition-colors capitalize ${
+                item?.slug?.current === currentSlug ? 'bg-shop-dark-blue text-white' : ''
+              }`}
+            >
+              <span className="block text-sm leading-snug whitespace-normal break-words">
+                {item?.name}
+              </span>
+            </Button>
+          ))}
+        </div>
 
-    <div className='flex-1'>
+        {/* Mobile: horizontally scrollable pills */}
+        <div className="md:hidden w-full">
+          <div className="overflow-x-auto px-4 -mx-4">
+            <div className="inline-flex items-center space-x-3 py-3">
+              {categories?.map((item) => (
+                <button
+                  key={item?._id}
+                  onClick={() => handleCategoryChange(item?.slug?.current as string)}
+                  className={`inline-flex items-center whitespace-nowrap px-3 py-2 rounded-full text-sm font-semibold transition-shadow shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-shop-dark-blue ${
+                    item?.slug?.current === currentSlug
+                      ? 'bg-shop-dark-blue text-white'
+                      : 'bg-white text-darkColor border'
+                  }`}
+                >
+                  {item?.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      {/* ---------- PRODUCTS ---------- */}
+      <div className='flex-1'>
         {loading ? (
           <div className="flex flex-col  items-center justify-center py-10 min-h-80 space-y-4 text-center bg-gray-100 rounded-lg w-full">
             <div className="flex items-center space-x-2 text-blue-600">
@@ -94,7 +118,7 @@ const CategoryProducts = ({categories,slug}:Props) => {
             className="mt-0 w-full"
           />
         )}
-    </div>
+      </div>
     </div>
   )
 }
