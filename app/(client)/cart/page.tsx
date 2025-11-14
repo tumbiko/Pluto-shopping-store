@@ -73,18 +73,6 @@ const CartPage = () => {
     }
   };
 
-// Define the operator type
-type Operator = {
-  id: number;
-  name: string;
-  ref_id: string;
-  short_code: string;
-  logo: string | null;
-  supported_country: {
-    name: string;
-    currency: string;
-  };
-};
 
 const handleCheckout = async () => {
   if (!selectedAddress) {
@@ -102,12 +90,8 @@ const handleCheckout = async () => {
 
   try {
     // Normalize phone number to +265XXXXXXXXX
-    let phone: string | undefined = selectedAddress.phone?.toString().trim();
-    if (!phone) {
-      toast.error("Selected address does not have a valid phone number.");
-      setLoading(false);
-      return;
-    }
+    let phone = selectedAddress.phone?.toString().trim();
+    if (!phone) throw new Error("Selected address does not have a phone number");
 
     if (!phone.startsWith("+265")) {
       if (phone.startsWith("0")) phone = phone.slice(1);
@@ -120,53 +104,17 @@ const handleCheckout = async () => {
       return;
     }
 
-    // Fetch operators from API route
-    const opRes = await fetch("/api/paychangu/get-operators");
-    const opData = await opRes.json();
-
-    if (!opRes.ok || opData.status !== "success") {
-      toast.error("Failed to fetch mobile money operators.");
-      setLoading(false);
-      return;
-    }
-
-    const operators: Operator[] = opData.data;
-
-    // Determine operator based on phone prefix
-    let operatorRefId: string | undefined;
-
-    if (phone.startsWith("+26588") || phone.startsWith("+26599")) {
-      operatorRefId = operators.find((op: Operator) =>
-        op.name.toLowerCase().includes("tnm")
-      )?.ref_id;
-    } else if (phone.startsWith("+26595") || phone.startsWith("+26596")) {
-      operatorRefId = operators.find((op: Operator) =>
-        op.name.toLowerCase().includes("airtel")
-      )?.ref_id;
-    }
-
-    if (!operatorRefId) {
-      toast.error("Could not determine mobile money operator for this number.");
-      setLoading(false);
-      return;
-    }
-
-    // Build payload
     const payload = {
       mobile: phone,
-      mobile_money_operator_ref_id: operatorRefId,
-      amount: getTotalPrice().toString(), // must be string
-      charge_id: `txn_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
+      amount: getTotalPrice(), // make sure this returns a number
       email: userEmail,
       first_name: selectedAddress.name || "Customer",
       last_name: "",
     };
 
-    // Debug logs
-    console.log("📌 Phone being sent:", phone);
-    console.log("💳 Checkout payload:", payload);
+    console.log("📌 Checkout payload:", payload);
 
-    // Send to PayChangu API route
+    // Call your API route
     const res = await fetch("/api/paychangu/mobile-money", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -174,22 +122,24 @@ const handleCheckout = async () => {
     });
 
     const data = await res.json();
-    console.log("📤 PayChangu API response:", data, res.status);
+    console.log("📤 PayChangu API response:", data);
 
     if (!res.ok || data.status === "failed") {
-      toast.error(data.message?.mobile?.[0] || data.error || "Payment failed to start.");
+      toast.error(data.message || "Payment failed to start.");
       return;
     }
 
     toast.success("Payment request sent. Please approve the charge on your phone.");
 
-  } catch (error) {
+    // Optionally, redirect to a success page or show a payment status modal
+  } catch (error: any) {
     console.error("❌ Checkout error:", error);
-    toast.error("Something went wrong.");
+    toast.error(error.message || "Something went wrong.");
   } finally {
     setLoading(false);
   }
 };
+
 
 
   return (

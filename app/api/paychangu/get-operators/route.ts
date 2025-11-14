@@ -2,28 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(req: NextRequest) {
   try {
-    const res = await fetch("https://api.paychangu.com/mobile-money/", {
-      method: "GET",
-      headers: {
-        "Authorization": `Bearer ${process.env.PAYCHANGU_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      return NextResponse.json({ status: "failed", message: text }, { status: res.status });
-    }
-
+    // Fetch operators directly from PayChangu REST API
+    const res = await fetch("https://api.paychangu.com/mobile-money/");
     const data = await res.json();
 
-    return NextResponse.json({
-      status: data.status || "success",
-      message: data.message || "",
-      data: data.data || [],
-    });
-  } catch (error) {
-    console.error("Error fetching PayChangu operators:", error);
-    return NextResponse.json({ status: "failed", message: "Internal server error", data: [] }, { status: 500 });
+    if (data.status !== "success") {
+      return NextResponse.json(
+        { status: "failed", message: "Failed to fetch operators" },
+        { status: 500 }
+      );
+    }
+
+    // Return the list of operators
+    return NextResponse.json({ status: "success", data: data.data });
+  } catch (error: any) {
+    console.error("PayChangu get-operators error:", error);
+    return NextResponse.json(
+      { status: "failed", message: error.message || "Internal server error" },
+      { status: 500 }
+    );
   }
 }
