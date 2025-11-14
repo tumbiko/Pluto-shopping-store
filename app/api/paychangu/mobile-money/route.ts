@@ -89,9 +89,9 @@ export async function POST(req: NextRequest) {
     const chargeData = await chargeRes.json();
 
     return NextResponse.json(chargeData);
-  } catch (err: any) {
+  } catch (err: unknown) {
     return NextResponse.json(
-      { status: "failed", message: err.message || "Server error" },
+      { status: "failed", "Server error" },
       { status: 500 }
     );
   }
