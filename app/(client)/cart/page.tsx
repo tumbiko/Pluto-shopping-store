@@ -17,7 +17,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Address } from "@/sanity.types";
+import { Address} from "@/sanity.types";
 import { client } from "@/sanity/lib/client";
 import { urlFor } from "@/sanity/lib/image";
 import useStore from "@/store";
@@ -27,8 +27,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { v4 as uuidv4 } from "uuid";
-
 
 const CartPage = () => {
   const {
@@ -75,13 +73,27 @@ const CartPage = () => {
     }
   };
 
+// Define the operator type
+type Operator = {
+  id: number;
+  name: string;
+  ref_id: string;
+  short_code: string;
+  logo: string | null;
+  supported_country: {
+    name: string;
+    currency: string;
+  };
+};
+
 const handleCheckout = async () => {
   if (!selectedAddress) {
     toast.error("Please select an address first.");
     return;
   }
 
-  if (!user?.emailAddresses?.[0]?.emailAddress) {
+  const userEmail = user?.emailAddresses?.[0]?.emailAddress;
+  if (!userEmail) {
     toast.error("Please add an email to your profile for payment notifications.");
     return;
   }
@@ -89,47 +101,72 @@ const handleCheckout = async () => {
   setLoading(true);
 
   try {
-    // Normalize phone number to PayChangu format: +265XXXXXXXXX
-    let phone = selectedAddress.phone?.toString().trim();
-
+    // Normalize phone number to +265XXXXXXXXX
+    let phone: string | undefined = selectedAddress.phone?.toString().trim();
     if (!phone) {
       toast.error("Selected address does not have a valid phone number.");
       setLoading(false);
       return;
     }
 
-    // Ensure it starts with +265
     if (!phone.startsWith("+265")) {
       if (phone.startsWith("0")) phone = phone.slice(1);
       phone = `+265${phone}`;
     }
 
-    // Optional: validate format
     if (!/^\+265\d{9}$/.test(phone)) {
       toast.error("Please enter a valid mobile number in the format +265XXXXXXXXX");
       setLoading(false);
       return;
     }
 
-    // Use address name as first_name, leave last_name empty (or split if you want)
-    const firstName = selectedAddress.name || "Customer";
-    const lastName = ""; // optional
+    // Fetch operators from API route
+    const opRes = await fetch("/api/paychangu/get-operators");
+    const opData = await opRes.json();
+
+    if (!opRes.ok || opData.status !== "success") {
+      toast.error("Failed to fetch mobile money operators.");
+      setLoading(false);
+      return;
+    }
+
+    const operators: Operator[] = opData.data;
+
+    // Determine operator based on phone prefix
+    let operatorRefId: string | undefined;
+
+    if (phone.startsWith("+26588") || phone.startsWith("+26599")) {
+      operatorRefId = operators.find((op: Operator) =>
+        op.name.toLowerCase().includes("tnm")
+      )?.ref_id;
+    } else if (phone.startsWith("+26595") || phone.startsWith("+26596")) {
+      operatorRefId = operators.find((op: Operator) =>
+        op.name.toLowerCase().includes("airtel")
+      )?.ref_id;
+    }
+
+    if (!operatorRefId) {
+      toast.error("Could not determine mobile money operator for this number.");
+      setLoading(false);
+      return;
+    }
 
     // Build payload
     const payload = {
-      mobile: phone, // +265XXXXXXXXX
-      mobile_money_operator_ref_id: "20be6c20-adeb-4b5b-a7ba-0769820df4fb", // default operator
+      mobile: phone,
+      mobile_money_operator_ref_id: operatorRefId,
       amount: getTotalPrice().toString(), // must be string
-      charge_id: uuidv4(), // unique transaction ID
-      email: user.emailAddresses[0].emailAddress,
-      first_name: firstName,
-      last_name: lastName,
+      charge_id: `txn_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
+      email: userEmail,
+      first_name: selectedAddress.name || "Customer",
+      last_name: "",
     };
 
     // Debug logs
-    console.log("📌 Phone being sent to PayChangu:", phone);
+    console.log("📌 Phone being sent:", phone);
     console.log("💳 Checkout payload:", payload);
 
+    // Send to PayChangu API route
     const res = await fetch("/api/paychangu/mobile-money", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -144,9 +181,7 @@ const handleCheckout = async () => {
       return;
     }
 
-    toast.success(
-      "Payment request sent. Please approve the charge on your phone."
-    );
+    toast.success("Payment request sent. Please approve the charge on your phone.");
 
   } catch (error) {
     console.error("❌ Checkout error:", error);
@@ -155,6 +190,7 @@ const handleCheckout = async () => {
     setLoading(false);
   }
 };
+
 
   return (
     <div className='bg-gray-50 dark:bg-[#121212] pb-52 md:pb-10 transition-colors duration-300'>

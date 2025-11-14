@@ -20,26 +20,6 @@ export const addressType = defineType({
       type: "email",
     }),
     defineField({
-      name: "phone",
-      title: "Phone Number",
-      type: "string",
-      description: "User's phone number, e.g. +1234567890",
-      validation: (Rule) =>
-        Rule.required()
-          .regex(/^\+?[1-9]\d{1,14}$/, {
-            name: "phone",
-            invert: false,
-          })
-          .error("Please enter a valid phone number"),
-    }),
-    defineField({
-      name: "userId",
-      title: "User ID",
-      type: "string",
-      description: "Reference to the user who owns this address",
-      validation: (Rule) => Rule.required(),
-    }),
-    defineField({
       name: "address",
       title: "Street Address",
       type: "string",
@@ -71,9 +51,12 @@ export const addressType = defineType({
             invert: false,
           })
           .custom((zip: string | undefined) => {
-            if (!zip) return "ZIP code is required";
-            if (!zip.match(/^\d{5}(-\d{4})?$/))
+            if (!zip) {
+              return "ZIP code is required";
+            }
+            if (!zip.match(/^\d{5}(-\d{4})?$/)) {
               return "Please enter a valid ZIP code (e.g. 12345 or 12345-6789)";
+            }
             return true;
           }),
     }),
@@ -84,6 +67,7 @@ export const addressType = defineType({
       description: "Is this the default shipping address?",
       initialValue: false,
     }),
+
     defineField({
       name: "createdAt",
       title: "Created At",
