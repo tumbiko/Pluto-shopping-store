@@ -132,12 +132,9 @@ const handleCheckout = async () => {
     toast.success("Payment request sent. Please approve the charge on your phone.");
 
     // Optionally, redirect to a success page or show a payment status modal
-  } catch (error: any) {
-    console.error("❌ Checkout error:", error);
-    toast.error(error.message || "Something went wrong.");
-  } finally {
-    setLoading(false);
-  }
+  } catch (error: unknown) {
+  console.error("❌ PayChangu API error:", error);
+}
 };
 
 
