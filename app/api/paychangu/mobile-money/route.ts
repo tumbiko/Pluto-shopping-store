@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import paychangu from "@api/paychangu";
 
 const PAYCHANGU_API_KEY = process.env.PAYCHANGU_API_KEY!;
 const CALLBACK_URL = process.env.PAYCHANGU_CALLBACK_URL!;
@@ -7,8 +6,7 @@ const RETURN_URL = process.env.PAYCHANGU_RETURN_URL!;
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { mobile, amount, email, first_name, last_name } = body;
+    const { mobile, amount, email, first_name, last_name } = await req.json();
 
     if (!mobile || !amount) {
       return NextResponse.json(
@@ -17,62 +15,84 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Fetch operators
-    const opRes = await fetch("https://api.paychangu.com/mobile-money/");
-    const opData: {
-      status: string;
-      data: {
-        name: string;
-        ref_id: string;
-      }[];
-    } = await opRes.json();
+    // 1. Fetch operators
+    const operatorRes = await fetch("https://api.paychangu.com/mobile-money/", {
+      headers: {
+        Authorization: `Bearer ${PAYCHANGU_API_KEY}`,
+      },
+    });
 
-    if (opData.status !== "success") {
+    const operatorData = await operatorRes.json();
+
+    if (operatorData.status !== "success") {
       return NextResponse.json(
-        { status: "failed", message: "Failed to fetch operators" },
+        { status: "failed", message: "Could not fetch operators" },
         { status: 500 }
       );
     }
 
-    let operatorRefId: string | undefined;
-    const operators = opData.data;
+    const operators = operatorData.data;
 
-    if (mobile.startsWith("+26588") || mobile.startsWith("+26599")) {
-      operatorRefId = operators.find(op => op.name.toLowerCase().includes("tnm"))?.ref_id;
-    } else if (mobile.startsWith("+26595") || mobile.startsWith("+26596")) {
-      operatorRefId = operators.find(op => op.name.toLowerCase().includes("airtel"))?.ref_id;
+    // 2. Determine operator
+    type Operator = { ref_id: string; name: string };
+
+    let operatorRefId: string | null = null;
+
+    for (const op of operators as Operator[]) {
+      const name = op.name.toLowerCase();
+
+      if (
+        (mobile.startsWith("+26588") || mobile.startsWith("+26599")) &&
+        name.includes("tnm")
+      ) {
+        operatorRefId = op.ref_id;
+      }
+
+      if (
+        (mobile.startsWith("+26595") || mobile.startsWith("+26596")) &&
+        name.includes("airtel")
+      ) {
+        operatorRefId = op.ref_id;
+      }
     }
 
     if (!operatorRefId) {
       return NextResponse.json(
-        { status: "failed", message: "Unsupported mobile operator" },
+        { status: "failed", message: "Unsupported operator" },
         { status: 400 }
       );
     }
 
-    // 🔥 SDK MUST be configured before calling any endpoint
-    paychangu.server("https://api.paychangu.com");
-    paychangu.auth(`Bearer ${PAYCHANGU_API_KEY}`);
-
+    // 3. Charge mobile money
     const payload = {
       amount: amount.toString(),
       currency: "MWK",
-      tx_ref: `txn_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
-      callback_url: CALLBACK_URL,
-      return_url: RETURN_URL,
+      tx_ref: `txn_${Date.now()}`,
       email,
       first_name,
       last_name,
       mobile,
+      callback_url: CALLBACK_URL,
+      return_url: RETURN_URL,
       mobile_money_operator_ref_id: operatorRefId,
     };
 
-    console.log("📦 Final SDK Payload:", payload);
+    const chargeRes = await fetch("https://api.paychangu.com/mobile-money/pay", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${PAYCHANGU_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
 
-    const response = await paychangu.initiateTransaction(payload);
+    const chargeData = await chargeRes.json();
 
-    return NextResponse.json(response.data);
-  } catch (err: unknown) {
-    console.log("❌ PayChangu Error:", err);
+    return NextResponse.json(chargeData);
+  } catch (err: any) {
+    return NextResponse.json(
+      { status: "failed", message: err.message || "Server error" },
+      { status: 500 }
+    );
   }
 }
