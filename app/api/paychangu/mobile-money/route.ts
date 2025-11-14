@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(chargeData);
   } catch (err: unknown) {
     return NextResponse.json(
-      { status: "failed", "Server error" },
+      
       { status: 500 }
     );
   }
