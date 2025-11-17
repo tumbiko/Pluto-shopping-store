@@ -17,6 +17,16 @@ export interface GroupedCartItems {
   quantity: number;
 }
 
+function splitName(fullName: string | undefined | null): { first: string; last: string } {
+  const name = (fullName || "").trim();
+  if (!name) return { first: "", last: "" };
+  const parts = name.split(/\s+/);
+  return {
+    first: parts[0] || "",
+    last: parts.slice(1).join(" ") || "",
+  };
+}
+
 export async function createPayChanguCheckoutSession(
   items: GroupedCartItems[],
   metadata: Metadata
@@ -29,7 +39,9 @@ export async function createPayChanguCheckoutSession(
   if (!callbackUrl) throw new Error("Missing PAYCHANGU_CALLBACK_URL env var");
   if (!baseUrl) throw new Error("Missing NEXT_PUBLIC_BASE_URL env var");
 
-  const currency = process.env.PAYCHANGU_CURRENCY ?? "MK"; // or "MWK"
+  // Prefer MWK as the currency code
+  const currency = process.env.PAYCHANGU_CURRENCY ?? "MWK";
+
   const amount =
     currency === "MWK"
       ? Math.round(items.reduce((s, i) => s + Number(i.product.price) * i.quantity, 0))
@@ -43,30 +55,36 @@ export async function createPayChanguCheckoutSession(
     image: it.product.images?.length ? urlFor(it.product.images[0]).url() : undefined,
   }));
 
-  const payload = {
-  amount,
-  currency,
-  callback_url: callbackUrl,
-  success_url: `${baseUrl}/success?orderNumber=${encodeURIComponent(
-    metadata.orderNumber
-  )}&tx_ref=${encodeURIComponent(metadata.orderNumber)}`,
-  cancel_url: `${baseUrl}/cart`,
-  tx_ref: metadata.orderNumber,
-  first_name: metadata.customerName?.split(" ")[0],
-  last_name: metadata.customerName?.split(" ").slice(1).join(" "),
-  email: metadata.customerEmail,
-  customization: {
-    title: `Order ${metadata.orderNumber}`,
-    description: `Payment for order ${metadata.orderNumber}`,
-  },
-  meta: {
-    orderNumber: metadata.orderNumber,
-    clerkUserId: metadata.clerkUserId,
-    address: metadata.address,
-    products,
-  },
-};
+  // Determine payer first/last name: prefer address firstName/lastName, otherwise fallback to customerName
+  const addrFirst = metadata.address?.firstName?.trim();
+  const addrLast = metadata.address?.lastName?.trim();
+  const nameFromAddress = (addrFirst || addrLast) ? { first: addrFirst || "", last: addrLast || "" } : null;
+  const fallback = splitName(metadata.customerName);
+  const payer = nameFromAddress ?? fallback;
 
+  const payload = {
+    amount,
+    currency,
+    callback_url: callbackUrl,
+    success_url: `${baseUrl}/success?orderNumber=${encodeURIComponent(
+      metadata.orderNumber
+    )}&tx_ref=${encodeURIComponent(metadata.orderNumber)}`,
+    cancel_url: `${baseUrl}/cart`,
+    tx_ref: metadata.orderNumber,
+    first_name: payer.first,
+    last_name: payer.last,
+    email: metadata.customerEmail,
+    customization: {
+      title: `Order ${metadata.orderNumber}`,
+      description: `Payment for order ${metadata.orderNumber}`,
+    },
+    meta: {
+      orderNumber: metadata.orderNumber,
+      clerkUserId: metadata.clerkUserId,
+      address: metadata.address,
+      products,
+    },
+  };
 
   const res = await fetch("https://api.paychangu.com/payment", {
     method: "POST",

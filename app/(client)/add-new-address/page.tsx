@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@clerk/nextjs'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -21,7 +21,7 @@ export interface Address {
   lastName: string
   email?: string
   phone: string
-  operator: string   // <-- add this
+  operator: string
   address: string
   city: string
   state: string
@@ -30,8 +30,12 @@ export interface Address {
   userId: string
 }
 
+interface Operator {
+  id: string
+  name: string
+  short_code: string
+}
 
-// Auto-detect operator based on Malawi phone prefixes
 const detectOperator = (phone: string) => {
   const p = phone.replace(/\D/g, '')
 
@@ -40,12 +44,12 @@ const detectOperator = (phone: string) => {
   return ''
 }
 
-const AddNewAddressPage = () => {
+const AddNewAddressPage: React.FC = () => {
   const { user } = useUser()
   const router = useRouter()
   const [addresses, setAddresses] = useState<Address[]>([])
   const [loading, setLoading] = useState(false)
-  const [operators, setOperators] = useState<any[]>([])
+  const [operators, setOperators] = useState<Operator[]>([])
 
   const [formData, setFormData] = useState({
     firstName: user?.firstName ?? '',
@@ -60,34 +64,48 @@ const AddNewAddressPage = () => {
   })
 
   // Fetch addresses
-  const fetchAddresses = async () => {
+  const fetchAddresses = useCallback(async () => {
     if (!user) return
     try {
       const res = await fetch(`/api/addresses?userId=${user.id}`)
-      const data = await res.json()
+      if (!res.ok) {
+        console.error('fetchAddresses: non-ok response', res.status)
+        return
+      }
+      const data: Address[] = await res.json()
       setAddresses(data)
     } catch (err) {
       console.error('Failed to fetch addresses', err)
     }
-  }
+  }, [user])
 
   // Fetch PayChangu operators
-  const fetchOperators = async () => {
+  const fetchOperators = useCallback(async () => {
     try {
       const res = await fetch('/api/paychangu/operators')
-      const data = await res.json()
-      if (data.status === 'success') setOperators(data.data)
+      if (!res.ok) {
+        console.error('fetchOperators: non-ok response', res.status)
+        return
+      }
+      const json: { status?: string; data?: Operator[] } = await res.json()
+      if (json.status === 'success' && Array.isArray(json.data)) {
+        setOperators(json.data)
+      } else if (Array.isArray(json.data)) {
+        // If API returns raw list without status
+        setOperators(json.data)
+      }
     } catch (err) {
       console.error('Failed to fetch operators', err)
     }
-  }
+  }, [])
 
   useEffect(() => {
     if (user) {
       fetchAddresses()
       fetchOperators()
     }
-  }, [user])
+    // fetchAddresses and fetchOperators are stable via useCallback
+  }, [user, fetchAddresses, fetchOperators])
 
   // Add new address
   const handleAddAddress = async (e: React.FormEvent) => {
@@ -116,7 +134,7 @@ const AddNewAddressPage = () => {
         default: false,
       })
 
-      fetchAddresses()
+      await fetchAddresses()
     } catch (err) {
       console.error(err)
       toast.error('Failed to add address')
@@ -134,7 +152,7 @@ const AddNewAddressPage = () => {
       if (!res.ok) throw new Error('Failed to delete')
 
       toast.success('Address deleted')
-      setAddresses(addresses.filter(a => a._id !== id))
+      setAddresses(prev => prev.filter(a => a._id !== id))
     } catch (err) {
       console.error(err)
       toast.error('Failed to delete')
@@ -143,7 +161,6 @@ const AddNewAddressPage = () => {
 
   const handleEdit = (id: string) => router.push(`/edit-address/${id}`)
 
-  // Handle phone change + auto-detect operator
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const phone = e.target.value
     setFormData(prev => ({
@@ -161,7 +178,6 @@ const AddNewAddressPage = () => {
         </h1>
 
         <div className="grid md:grid-cols-2 gap-8">
-
           {/* Left - Saved Addresses */}
           <div>
             <Card>
@@ -206,7 +222,6 @@ const AddNewAddressPage = () => {
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleAddAddress} className="space-y-4">
-
                   {/* First + Last Name */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>

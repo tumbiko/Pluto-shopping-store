@@ -1,4 +1,5 @@
 'use client'
+
 import Container from "@/components/Container";
 import AddNewAddress from '@/components/ui/AddNewAddress';
 import AddToWishList from "@/components/ui/AddToWishListButton";
@@ -17,7 +18,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Address} from "@/sanity.types";
+import { Address } from "@/sanity.types";
 import { client } from "@/sanity/lib/client";
 import { urlFor } from "@/sanity/lib/image";
 import useStore from "@/store";
@@ -25,7 +26,7 @@ import { useAuth, useUser } from "@clerk/nextjs";
 import { ShoppingBag, Trash } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 
 interface Operator {
@@ -35,9 +36,6 @@ interface Operator {
   ref_id?: string;
   logo?: string | null;
 }
-
-
-
 
 const CartPage = () => {
   const [operators, setOperators] = useState<Operator[]>([]);
@@ -56,7 +54,8 @@ const CartPage = () => {
   const [addresses, setAddresses] = useState<Address[] | null>(null);
   const [selectedAddress, setSelectedAddress] = useState<Address | null>(null);
 
-  const fetchAddresses = async () => {
+  // make fetchAddresses stable so it can be safely used in useEffect deps
+  const fetchAddresses = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
@@ -66,7 +65,7 @@ const CartPage = () => {
   lastName,
   email,
   phone,
-  operator,   // <-- include this
+  operator,
   address,
   city,
   state,
@@ -85,11 +84,12 @@ const CartPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
+  // effect: depends on user and the stable fetchAddresses
   useEffect(() => {
     if (user) fetchAddresses();
-  }, [user]);
+  }, [user, fetchAddresses]);
 
   const handleResetCart = () => {
     if (window.confirm("Are you sure you want to reset your cart?")) {
@@ -98,92 +98,86 @@ const CartPage = () => {
     }
   };
 
-useEffect(() => {
-  async function loadOps() {
-    const res = await fetch("/api/paychangu/operators");
-    const data = await res.json();
-    if (data.status === "success") {
-      setOperators(data.data); // full operator list
+  useEffect(() => {
+    async function loadOps() {
+      const res = await fetch("/api/paychangu/operators");
+      const data = await res.json();
+      if (data.status === "success") {
+        setOperators(data.data); // full operator list
+      }
     }
-  }
-  loadOps();
-}, []);
+    loadOps();
+  }, []);
 
-
-const handleCheckout = async () => {
-  if (!selectedAddress) {
-    toast.error("Please select an address first.");
-    return;
-  }
-
-  const userEmail = user?.emailAddresses?.[0]?.emailAddress;
-  if (!userEmail) {
-    toast.error("Please add an email to your profile for payment notifications.");
-    return;
-  }
-
-  setLoading(true);
-
-  try {
-    // Use phone exactly as stored in Sanity
-    let phone = selectedAddress.phone?.toString().trim();
-    if (!phone) throw new Error("Selected address does not have a phone number");
-
-    // Validation only — ensure numeric digits
-    const rawDigits = phone.replace(/\D/g, "");
-    if (![9, 10, 12].includes(rawDigits.length)) {
-      toast.error("Please enter a valid mobile number");
-      setLoading(false);
+  const handleCheckout = async () => {
+    if (!selectedAddress) {
+      toast.error("Please select an address first.");
       return;
     }
 
-    // Use operator from selectedAddress
-    const operator = selectedAddress.operator;
-    if (!operator) {
-      toast.error("Selected address does not have a mobile money operator.");
-      setLoading(false);
+    const userEmail = user?.emailAddresses?.[0]?.emailAddress;
+    if (!userEmail) {
+      toast.error("Please add an email to your profile for payment notifications.");
       return;
     }
 
-    const payload = {
-  mobile: phone.startsWith("+") ? phone : `+265${phone.replace(/\D/g, "")}`,
-  amount: getTotalPrice(),      // in MWK
-  email: userEmail,
-  first_name: selectedAddress.firstName || "Customer",
-  last_name: selectedAddress.lastName || "",
-  operator: selectedAddress.operator?.toLowerCase(), // tnm or airtel
-};
+    setLoading(true);
 
-    console.log("📌 Checkout payload:", payload);
+    try {
+      // Use phone exactly as stored in Sanity
+      const phone = selectedAddress.phone?.toString().trim();
+      if (!phone) throw new Error("Selected address does not have a phone number");
 
-    const res = await fetch("/api/paychangu/mobile-money", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+      // Validation only — ensure numeric digits
+      const rawDigits = phone.replace(/\D/g, "");
+      if (![9, 10, 12].includes(rawDigits.length)) {
+        toast.error("Please enter a valid mobile number");
+        setLoading(false);
+        return;
+      }
 
-    const data = await res.json();
-    console.log("📤 PayChangu API response:", data);
+      // Use operator from selectedAddress
+      const operator = selectedAddress.operator;
+      if (!operator) {
+        toast.error("Selected address does not have a mobile money operator.");
+        setLoading(false);
+        return;
+      }
 
-    if (!res.ok || data.status === "failed") {
-      toast.error(data.message || "Payment failed to start.");
+      const payload = {
+        mobile: phone.startsWith("+") ? phone : `+265${phone.replace(/\D/g, "")}`,
+        amount: getTotalPrice(),      // in MWK
+        email: userEmail,
+        first_name: selectedAddress.firstName || "Customer",
+        last_name: selectedAddress.lastName || "",
+        operator: selectedAddress.operator?.toLowerCase(), // tnm or airtel
+      };
+
+      console.log("📌 Checkout payload:", payload);
+
+      const res = await fetch("/api/paychangu/mobile-money", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      console.log("📤 PayChangu API response:", data);
+
+      if (!res.ok || data.status === "failed") {
+        toast.error(data.message || "Payment failed to start.");
+        setLoading(false);
+        return;
+      }
+
+      toast.success("Payment request sent. Please approve the charge on your phone.");
+    } catch (error: unknown) {
+      console.error("❌ PayChangu API error:", error);
+      toast.error("An error occurred while initiating payment.");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    toast.success("Payment request sent. Please approve the charge on your phone.");
-  } catch (error: unknown) {
-    console.error("❌ PayChangu API error:", error);
-    toast.error("An error occurred while initiating payment.");
-  } finally {
-    setLoading(false);
-  }
-};
-
-
-
-
-
+  };
 
   return (
     <div className='bg-gray-50 dark:bg-[#121212] pb-52 md:pb-10 transition-colors duration-300'>
@@ -361,24 +355,23 @@ const handleCheckout = async () => {
                         <span>Total</span>
                         <PriceFormatter amount={getTotalPrice()} className="text-lg font-bold text-black dark:text-gray-200" />
                       </div>
-<select
-  value={selectedAddress?.operator || ""}
-  onChange={(e) =>
-    setSelectedAddress({ ...selectedAddress!, operator: e.target.value })
-  }
-  className="w-full p-2 border rounded"
->
-  <option value="" disabled>
-    Select Mobile Money Operator
-  </option>
-  {operators.map((op) => (
-    <option key={op.id} value={op.short_code}>
-      {op.name}
-    </option>
-  ))}
-</select>
 
-
+                      <select
+                        value={selectedAddress?.operator || ""}
+                        onChange={(e) =>
+                          setSelectedAddress({ ...selectedAddress!, operator: e.target.value })
+                        }
+                        className="w-full p-2 border rounded"
+                      >
+                        <option value="" disabled>
+                          Select Mobile Money Operator
+                        </option>
+                        {operators.map((op) => (
+                          <option key={op.id} value={op.short_code}>
+                            {op.name}
+                          </option>
+                        ))}
+                      </select>
 
                     </div>
 
