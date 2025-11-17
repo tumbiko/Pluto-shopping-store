@@ -1,7 +1,8 @@
-'use client'
+"use client";
 
+import React, { useCallback, useEffect, useState } from "react";
 import Container from "@/components/Container";
-import AddNewAddress from '@/components/ui/AddNewAddress';
+import AddNewAddress from "@/components/ui/AddNewAddress";
 import AddToWishList from "@/components/ui/AddToWishListButton";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,7 +19,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Address } from "@/sanity.types";
 import { client } from "@/sanity/lib/client";
 import { urlFor } from "@/sanity/lib/image";
 import useStore from "@/store";
@@ -26,19 +26,60 @@ import { useAuth, useUser } from "@clerk/nextjs";
 import { ShoppingBag, Trash } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import React, { useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
+import type { Product } from "@/sanity.types";
 
-interface Operator {
-  id: number;
-  name: string;
-  short_code: string;
-  ref_id?: string;
-  logo?: string | null;
+type ProductMinimal = Product & {
+  _type: string;
+  _createdAt: string;
+  _updatedAt: string;
+  _rev: string;
+};
+
+
+/** Sanity address shape aligned with your schema (firstName + lastName) */
+export interface ExtendedSanityAddress {
+  _id: string;
+  _type?: "address";
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  operator?: string; // short_code or id
+  operatorRefId?: string; // ref_id from PayChangu
+  address?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  default?: boolean;
+  createdAt?: string;
 }
 
-const CartPage = () => {
+/** Operator shape returned from PayChangu API */
+interface Operator {
+  id: number | string;
+  name: string;
+  short_code: string;
+  ref_id: string;
+  logo?: string | null;
+  supports_withdrawals?: boolean;
+  supported_country?: { name: string; currency: string };
+}
+
+/** groupedItems from store -> we only need product part for rendering here */
+type GroupedItem = { product: ProductMinimal };
+
+/**
+ * Cart Page
+ */
+const CartPage: React.FC = () => {
   const [operators, setOperators] = useState<Operator[]>([]);
+  const [addresses, setAddresses] = useState<ExtendedSanityAddress[] | null>(null);
+  const [selectedAddress, setSelectedAddress] = useState<ExtendedSanityAddress | null>(null);
+  const [selectedOperatorRefId, setSelectedOperatorRefId] = useState<string>("");
+  const [loading, setLoading] = useState(false);
+
+  // store API (assumed stable)
   const {
     deleteCartProduct,
     getTotalPrice,
@@ -47,36 +88,24 @@ const CartPage = () => {
     resetCart,
   } = useStore();
 
-  const [loading, setLoading] = useState(false);
-  const groupedItems = useStore((state) => state.getGroupedItems());
+  // we expect getGroupedItems to return an array of grouped product objects
+  const groupedItems = useStore((state) => state.getGroupedItems()) as GroupedItem[] | undefined;
   const { isSignedIn } = useAuth();
   const { user } = useUser();
-  const [addresses, setAddresses] = useState<Address[] | null>(null);
-  const [selectedAddress, setSelectedAddress] = useState<Address | null>(null);
 
-  // make fetchAddresses stable so it can be safely used in useEffect deps
+  // --- Fetch addresses from Sanity (typed) ---
   const fetchAddresses = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
-      const query = `*[_type=="address" && userId == $userId] | order(publishedAt desc){
-  _id,
-  firstName,
-  lastName,
-  email,
-  phone,
-  operator,
-  address,
-  city,
-  state,
-  zip,
-  default
-}`;
-
-      const data: Address[] = await client.fetch(query, { userId: user.id });
-      setAddresses(data);
-      const defaultAddress = data.find(addr => addr.default);
-      setSelectedAddress(defaultAddress || data[0] || null);
+      const query = `*[_type=="address" && userId == $userId] | order(createdAt desc){
+        _id, firstName, lastName, email, phone, operator, operatorRefId, address, city, state, zip, "default": default
+      }`;
+      const data = (await client.fetch(query, { userId: user.id })) as ExtendedSanityAddress[];
+      setAddresses(data ?? []);
+      const defaultAddr = data?.find((a) => a.default);
+      setSelectedAddress(defaultAddr ?? (data && data.length ? data[0] : null));
+      if (defaultAddr?.operatorRefId) setSelectedOperatorRefId(defaultAddr.operatorRefId);
     } catch (error) {
       console.error("Address fetching error", error);
       setAddresses([]);
@@ -86,108 +115,149 @@ const CartPage = () => {
     }
   }, [user]);
 
-  // effect: depends on user and the stable fetchAddresses
-  useEffect(() => {
-    if (user) fetchAddresses();
-  }, [user, fetchAddresses]);
+  // --- Fetch PayChangu operators ---
+  const fetchOperators = useCallback(async () => {
+    try {
+      const res = await fetch("/api/paychangu/get-operators");
+      if (!res.ok) {
+        console.error("fetchOperators: non-ok response", res.status);
+        return;
+      }
+      const json = await res.json();
+      const ops = Array.isArray(json.data) ? json.data : json;
+      setOperators(ops as Operator[]);
+    } catch (err) {
+      console.error("Failed to fetch operators", err);
+    }
+  }, []);
 
+  useEffect(() => {
+    if (user) {
+      fetchAddresses();
+      fetchOperators();
+    }
+  }, [user, fetchAddresses, fetchOperators]);
+
+  // Helper: resolve a ref_id for an address (prefer operatorRefId; else map short_code -> ref_id)
+  const resolveOperatorRefId = (addr: ExtendedSanityAddress | null): string | null => {
+    if (!addr) return null;
+    if (addr.operatorRefId) return addr.operatorRefId;
+    if (addr.operator) {
+      const found = operators.find(
+        (op) => op.short_code === addr.operator || String(op.id) === addr.operator
+      );
+      return found ? found.ref_id : null;
+    }
+    return null;
+  };
+
+  // Reset cart with confirmation
   const handleResetCart = () => {
-    if (window.confirm("Are you sure you want to reset your cart?")) {
+    if (typeof window !== "undefined" && window.confirm("Are you sure you want to reset your cart?")) {
       resetCart();
       toast.success("Cart reset successfully!");
     }
   };
 
-  useEffect(() => {
-  async function loadOperators() {
-    try {
-      const res = await fetch("/api/paychangu/get-operators");
-      const data = await res.json();
-      if (data.status === "success") setOperators(data.data);
-    } catch (err) {
-      console.error("Failed to load operators", err);
-    }
-  }
-  loadOperators();
-}, []);
-
-
+  // Checkout using PayChangu mobile-money initialize endpoint via server route
   const handleCheckout = async () => {
-  if (!selectedAddress) {
-    toast.error("Please select an address first.");
-    return;
-  }
-
-  if (!selectedAddress.operatorRefId) {
-    toast.error("Please select a mobile money operator.");
-    return;
-  }
-
-  const userEmail = user?.emailAddresses?.[0]?.emailAddress;
-  if (!userEmail) {
-    toast.error("Please add an email to your profile for payment notifications.");
-    return;
-  }
-
-  setLoading(true);
-
-  try {
-    const phone = selectedAddress.phone?.toString().trim();
-    if (!phone) throw new Error("Selected address does not have a phone number");
-
-    // Only digits
-    const rawDigits = phone.replace(/\D/g, "");
-    if (![9, 10, 12].includes(rawDigits.length)) {
-      toast.error("Please enter a valid mobile number");
-      setLoading(false);
+    if (!selectedAddress) {
+      toast.error("Please select an address first.");
       return;
     }
 
-    const payload = {
-      mobile: `+265${phone}`,
-      mobile_money_operator_ref_id: selectedAddress.operatorRefId,
-      amount: getTotalPrice(),
-      charge_id: `order-${Date.now()}`, // unique per transaction
-      email: userEmail,
-      first_name: selectedAddress.firstName || "Customer",
-      last_name: selectedAddress.lastName || "",
-    };
-
-    console.log("📌 Mobile Money charge payload:", payload);
-
-    const res = await fetch("/api/mobile-money/initialize", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    const data = await res.json();
-    console.log("📤 Mobile Money charge response:", data);
-
-    if (data.status !== "success") {
-      toast.error(data.message?.mobile?.[0] || "Payment failed");
-      setLoading(false);
+    const operatorRefId = selectedOperatorRefId || resolveOperatorRefId(selectedAddress);
+    if (!operatorRefId) {
+      toast.error(
+        "Selected address does not have a mobile money operator configured. Please set one in the address or choose an operator."
+      );
       return;
     }
 
-    toast.success("Payment request sent. Please approve on your phone.");
-  } catch (error) {
-    console.error(error);
-    toast.error("Error initiating mobile money payment");
-  } finally {
-    setLoading(false);
-  }
-};
+    const userEmail = user?.emailAddresses?.[0]?.emailAddress;
+    if (!userEmail) {
+      toast.error("Please add an email to your profile for payment notifications.");
+      return;
+    }
 
+    setLoading(true);
 
+    try {
+      const rawPhone = (selectedAddress.phone || "").toString().trim();
+      if (!rawPhone) throw new Error("Selected address does not have a phone number");
 
+      // Keep simple normalization: remove non-digits
+      let digits = rawPhone.replace(/\D/g, "");
 
+      // If user entered 09XXXXXXXX (10 digits with leading 0), remove leading '0'
+      if (digits.length === 10 && digits.startsWith("0")) {
+        digits = digits.slice(1);
+      }
 
+      // Validate Malawian 9-digit numbers after normalization
+      if (digits.length !== 9) {
+        toast.error("Please enter a valid 9-digit Malawian mobile number on the selected address");
+        setLoading(false);
+        return;
+      }
+
+      // Prepend country code if your server expects it, but we send original phone value here
+      const mobile = selectedAddress.phone;
+
+      // Ensure amount is string
+      const amount = Number(getTotalPrice());
+      if (Number.isNaN(amount)) {
+        toast.error("Invalid order total");
+        setLoading(false);
+        return;
+      }
+
+      const chargeId = `order-${Date.now()}`;
+
+      const payload = {
+        mobile,
+        mobile_money_operator_ref_id: operatorRefId,
+        amount: amount.toString(),
+        charge_id: chargeId,
+        email: userEmail,
+        first_name: selectedAddress.firstName || user?.firstName || "",
+        last_name: selectedAddress.lastName || user?.lastName || "",
+      };
+
+      console.log("📌 Mobile Money payload:", payload);
+
+      const res = await fetch("/api/mobile-money/initialize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      console.log("📤 Mobile Money charge response:", data);
+
+      if (!res.ok || data.status !== "success") {
+        const message = data?.message;
+        const mobileErr = message?.mobile?.[0];
+        toast.error(mobileErr || message || "Payment failed to start.");
+        setLoading(false);
+        return;
+      }
+
+      toast.success("Payment request sent. Please approve the charge on your phone.");
+    } catch (error) {
+      console.error("❌ PayChangu API error:", error);
+      toast.error("An error occurred while initiating payment.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Render
   return (
-    <div className='bg-gray-50 dark:bg-[#121212] pb-52 md:pb-10 transition-colors duration-300'>
+    <div className="bg-gray-50 dark:bg-[#121212] pb-52 md:pb-10 transition-colors duration-300">
       {isSignedIn ? (
         <Container>
-          {groupedItems?.length ? (
+          {groupedItems && groupedItems.length ? (
             <>
               <div className="flex items-center justify-between py-5 text-black dark:text-white">
                 <div className="flex items-center gap-2">
@@ -203,19 +273,23 @@ const CartPage = () => {
                 {/* Products List */}
                 <div className="lg:col-span-2 rounded-lg">
                   <div className="border bg-white dark:bg-[#1a1a1a] rounded-md transition-colors duration-300">
-                    {groupedItems?.map(({ product }) => {
+                    {groupedItems.map(({ product }) => {
                       const itemCount = getItemCount(product._id);
+                      const priceNum = Number(product.price ?? 0);
                       return (
                         <div
-                          key={product?._id}
+                          key={product._id}
                           className="border-b last:border-b-0 p-2.5 flex items-center justify-between gap-5 border-gray-200 dark:border-gray-700 transition-colors duration-300"
                         >
                           <div className="flex flex-1 items-start gap-2 h-36 md:h-44">
-                            {product?.images && (
-                              <Link href={`/product/${product?.slug?.current}`} className="border p-0.5 md:p-1 mr-2 rounded-md overflow-hidden group border-gray-200 dark:border-gray-700 transition-colors duration-300">
+                            {product.images && product.images.length > 0 && (
+                              <Link
+                                href={`/product/${product.slug?.current ?? ""}`}
+                                className="border p-0.5 md:p-1 mr-2 rounded-md overflow-hidden group border-gray-200 dark:border-gray-700 transition-colors duration-300"
+                              >
                                 <Image
-                                  src={urlFor(product?.images[0]).url()}
-                                  alt="product image"
+                                   src={urlFor(product.images[0]).url()} // ✅ generate the URL
+                                  alt={product.name || "product image"}
                                   width={500}
                                   height={500}
                                   loading="lazy"
@@ -225,12 +299,12 @@ const CartPage = () => {
                             )}
                             <div className="h-full flex flex-1 flex-col justify-between py-1 text-black dark:text-gray-300 transition-colors duration-300">
                               <div className="flex flex-col gap-0.5 md:gap-1.5">
-                                <h2 className="text-base font-semibold line-clamp-1">{product?.name}</h2>
+                                <h2 className="text-base font-semibold line-clamp-1">{product.name}</h2>
                                 <p className="text-sm capitalize">
-                                  Variant: <span className="font-semibold">{product?.variant}</span>
+                                  Variant: <span className="font-semibold">{product.variant}</span>
                                 </p>
                                 <p className="text-sm capitalize">
-                                  Status: <span className="font-semibold">{product?.status}</span>
+                                  Status: <span className="font-semibold">{product.status}</span>
                                 </p>
                               </div>
                               <div className="flex items-center gap-2">
@@ -245,7 +319,7 @@ const CartPage = () => {
                                     <TooltipTrigger>
                                       <Trash
                                         onClick={() => {
-                                          deleteCartProduct(product?._id);
+                                          deleteCartProduct(product._id);
                                           toast.success("Product deleted successfully!");
                                         }}
                                         className="w-4 h-4 md:w-5 md:h-5 mr-1 text-gray-500 dark:text-gray-300 hover:text-red-600 hoverEffect transition-colors duration-300"
@@ -259,7 +333,7 @@ const CartPage = () => {
                           </div>
                           <div className="flex flex-col items-start justify-between h-36 md:h-44 p-0.5 md:p-1">
                             <PriceFormatter
-                              amount={(product?.price as number) * itemCount}
+                              amount={priceNum * itemCount}
                               className="font-bold text-lg text-black dark:text-gray-200 transition-colors duration-300"
                             />
                             <QuantityButtons product={product} />
@@ -268,13 +342,11 @@ const CartPage = () => {
                       );
                     })}
 
-                    <Button
-                      onClick={handleResetCart}
-                      className="m-5 font-semibold"
-                      variant="destructive"
-                    >
-                      Reset Cart
-                    </Button>
+                    <div className="p-4">
+                      <Button onClick={handleResetCart} className="font-semibold" variant="destructive">
+                        Reset Cart
+                      </Button>
+                    </div>
                   </div>
                 </div>
 
@@ -294,7 +366,10 @@ const CartPage = () => {
                       <Separator />
                       <div className="flex items-center justify-between font-semibold text-lg">
                         <span>Total</span>
-                        <PriceFormatter amount={getTotalPrice()} className="text-lg font-bold text-black dark:text-gray-200" />
+                        <PriceFormatter
+                          amount={getTotalPrice()}
+                          className="text-lg font-bold text-black dark:text-gray-200"
+                        />
                       </div>
                       <Button
                         className="w-full rounded-full tracking-wide font-semibold hoverEffect"
@@ -313,27 +388,56 @@ const CartPage = () => {
                             <CardTitle className="text-black dark:text-white">Delivery Address</CardTitle>
                           </CardHeader>
                           <CardContent>
-                            <RadioGroup defaultValue={addresses.find(addr => addr.default)?._id.toString()}>
+                            <RadioGroup
+                              // defaultValue should be the selected address if present
+                              defaultValue={addresses.find((addr) => addr.default)?._id.toString()}
+                              onValueChange={(val) => {
+                                const found = addresses.find((a) => a._id.toString() === val);
+                                if (found) {
+                                  setSelectedAddress(found);
+                                  setSelectedOperatorRefId(found.operatorRefId ?? "");
+                                }
+                              }}
+                            >
                               {addresses.map((address) => (
                                 <div
-                                  key={address?._id}
-                                  onClick={() => setSelectedAddress(address)}
+                                  key={address._id}
+                                  onClick={() => {
+                                    setSelectedAddress(address);
+                                    setSelectedOperatorRefId(address.operatorRefId ?? "");
+                                  }}
                                   className={`flex items-center space-x-2 mb-4 cursor-pointer ${
-                                    selectedAddress?._id === address?._id ? "text-shop-dark-yellow dark:text-shop-golden" : "text-black dark:text-gray-300"
+                                    selectedAddress?._id === address._id
+                                      ? "text-shop-dark-yellow dark:text-shop-golden"
+                                      : "text-black dark:text-gray-300"
                                   } transition-colors duration-300`}
                                 >
-                                  <RadioGroupItem value={address?._id.toString()} />
-                                  <Label htmlFor={`address-${address?._id}`} className="grid gap-1.5 flex-1">
-                                    <span className="font-semibold">{address?.firstName}</span>
-                                    <span className="font-semibold">{address?.lastName}</span>
+                                  <RadioGroupItem value={address._id.toString()} />
+                                  <Label htmlFor={`address-${address._id}`} className="grid gap-1.5 flex-1">
+                                    <span className="font-semibold">
+                                      {address.firstName} {address.lastName}
+                                    </span>
                                     <span className="text-sm text-black/60 dark:text-gray-400">
                                       {address.address}, {address.city}, {address.state} {address.zip}
+                                    </span>
+                                    <span className="text-sm text-gray-500">
+                                      Operator:{" "}
+                                      {(
+                                        (address.operatorRefId &&
+                                          operators.find((o) => o.ref_id === address.operatorRefId)?.name) ||
+                                        address.operator ||
+                                        (resolveOperatorRefId(address)
+                                          ? operators.find((o) => o.ref_id === resolveOperatorRefId(address))?.name
+                                          : "Not set")
+                                      )}
                                     </span>
                                   </Label>
                                 </div>
                               ))}
                             </RadioGroup>
-                            <AddNewAddress />
+                            <div className="mt-3">
+                              <AddNewAddress />
+                            </div>
                           </CardContent>
                         </Card>
                       </div>
@@ -357,43 +461,49 @@ const CartPage = () => {
                       <Separator />
                       <div className="flex items-center justify-between font-semibold text-lg">
                         <span>Total</span>
-                        <PriceFormatter amount={getTotalPrice()} className="text-lg font-bold text-black dark:text-gray-200" />
+                        <PriceFormatter
+                          amount={getTotalPrice()}
+                          className="text-lg font-bold text-black dark:text-gray-200"
+                        />
                       </div>
-                       
-                       <select
-  value={selectedAddress?.operatorRefId || ""}
-  onChange={(e) =>
-    setSelectedAddress({ ...selectedAddress!, operatorRefId: e.target.value })
-  }
-  className="w-full p-2 border rounded"
->
-  <option value="" disabled>
-    Select Mobile Money Operator
-  </option>
-  {operators.map((op) => (
-    <option key={op.id} value={op.ref_id}>
-      {op.name}
-    </option>
-  ))}
-</select>
 
+                      {/* Operator select for mobile checkout */}
+                      <div>
+                        <Label>Mobile Money Operator</Label>
+                        <select
+                          value={
+                            selectedOperatorRefId ||
+                            (selectedAddress ? resolveOperatorRefId(selectedAddress) ?? "" : "")
+                          }
+                          onChange={(e) => setSelectedOperatorRefId(e.target.value)}
+                          className="w-full p-2 border rounded"
+                        >
+                          <option value="">Select Mobile Money Operator</option>
+                          {operators.map((op) => (
+                            <option key={op.id} value={op.ref_id}>
+                              {op.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
+                      {!selectedAddress && (
+                        <div>
+                          <AddNewAddress />
+                        </div>
+                      )}
 
-
+                      {selectedAddress && (
+                        <Button
+                          className="w-full rounded-full font-semibold tracking-wide hoverEffect"
+                          size="lg"
+                          disabled={loading}
+                          onClick={handleCheckout}
+                        >
+                          {loading ? "Please wait..." : "Proceed to Checkout"}
+                        </Button>
+                      )}
                     </div>
-
-                    {!selectedAddress && <AddNewAddress />}
-
-                    {selectedAddress && (
-                      <Button
-                        className="w-full rounded-full font-semibold tracking-wide hoverEffect"
-                        size="lg"
-                        disabled={loading}
-                        onClick={handleCheckout}
-                      >
-                        {loading ? "Please wait..." : "Proceed to Checkout"}
-                      </Button>
-                    )}
                   </div>
                 </div>
               </div>

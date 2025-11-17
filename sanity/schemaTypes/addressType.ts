@@ -8,7 +8,7 @@ export const addressType = defineType({
   icon: HomeIcon,
   fields: [
     defineField({
-      name: "name",
+      name: "FirstName",
       title: "First Name",
       type: "string",
       validation: (Rule) => Rule.required()
@@ -66,6 +66,13 @@ export const addressType = defineType({
       type: "boolean",
       initialValue: false,
     }),
+    defineField({
+  name: "operatorRefId",
+  title: "Operator Ref ID",
+  type: "string",
+  description: "PayChangu operator ref_id (used for mobile money payments)",
+  readOnly: true, // optional: prevent manual edits in Studio
+}),
     defineField({
       name: "createdAt",
       title: "Created At",
