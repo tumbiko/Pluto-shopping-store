@@ -27,25 +27,29 @@ function splitName(fullName: string | undefined | null): { first: string; last: 
   };
 }
 
+/**
+ * Create a PayChangu standard checkout session (hosted checkout).
+ * Returns the PayChangu checkout URL (string) to redirect the customer to.
+ */
 export async function createPayChanguCheckoutSession(
   items: GroupedCartItems[],
   metadata: Metadata
 ): Promise<string> {
   const secretKey = process.env.PAYCHANGU_SECRET_KEY;
-  const callbackUrl = process.env.PAYCHANGU_CALLBACK_URL;
+  const callbackUrl = process.env.PAYCHANGU_CALLBACK_URL; // IPN / webhook URL (required by PayChangu docs)
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
 
   if (!secretKey) throw new Error("Missing PAYCHANGU_SECRET_KEY env var");
   if (!callbackUrl) throw new Error("Missing PAYCHANGU_CALLBACK_URL env var");
   if (!baseUrl) throw new Error("Missing NEXT_PUBLIC_BASE_URL env var");
 
-  // Prefer MWK as the currency code
-  const currency = process.env.PAYCHANGU_CURRENCY ?? "MWK";
+  // Use MWK by default (PayChangu expects 'MWK' or 'USD')
+  const currency = (process.env.PAYCHANGU_CURRENCY ?? "MWK").toUpperCase();
 
-  const amount =
-    currency === "MWK"
-      ? Math.round(items.reduce((s, i) => s + Number(i.product.price) * i.quantity, 0))
-      : items.reduce((s, i) => s + Number(i.product.price) * i.quantity, 0);
+  // total amount as integer (PayChangu expects int32)
+  const amountInt = Math.round(
+    items.reduce((s, i) => s + Number(i.product.price || 0) * (i.quantity || 0), 0)
+  );
 
   const products = items.map((it) => ({
     id: it.product._id,
@@ -55,22 +59,36 @@ export async function createPayChanguCheckoutSession(
     image: it.product.images?.length ? urlFor(it.product.images[0]).url() : undefined,
   }));
 
-  // Determine payer first/last name: prefer address firstName/lastName, otherwise fallback to customerName
+  // Build payer name preferring address first/last if available
   const addrFirst = metadata.address?.firstName?.trim();
   const addrLast = metadata.address?.lastName?.trim();
-  const nameFromAddress = (addrFirst || addrLast) ? { first: addrFirst || "", last: addrLast || "" } : null;
-  const fallback = splitName(metadata.customerName);
-  const payer = nameFromAddress ?? fallback;
+  const payer = (addrFirst || addrLast)
+    ? { first: addrFirst || "", last: addrLast || "" }
+    : splitName(metadata.customerName);
 
-  const payload = {
-    amount,
-    currency,
-    callback_url: callbackUrl,
-    success_url: `${baseUrl}/success?orderNumber=${encodeURIComponent(
-      metadata.orderNumber
-    )}&tx_ref=${encodeURIComponent(metadata.orderNumber)}`,
-    cancel_url: `${baseUrl}/cart`,
-    tx_ref: metadata.orderNumber,
+  // Build a small, safe address object for meta (avoid sending whole Sanity doc)
+  const metaAddress = metadata.address
+    ? {
+        firstName: metadata.address.firstName ?? "",
+        lastName: metadata.address.lastName ?? "",
+        address: metadata.address.address ?? "",
+        city: metadata.address.city ?? "",
+        state: metadata.address.state ?? "",
+        zip: metadata.address.zip ?? "",
+        phone: metadata.address.phone ?? "",
+        operator: metadata.address.operator ?? "",
+      }
+    : undefined;
+
+  const payload: Record<string, any> = {
+    amount: amountInt,
+    currency, // 'MWK' or 'USD'
+    callback_url: callbackUrl, // PayChangu expects callback_url (IPN)
+    // return_url is used for redirect after cancel/failed in docs; we use it for success redirect here
+    // PayChangu's docs show return_url (return after cancel/failed). Many examples also use it for redirects.
+    // We include return_url to ensure PayChangu can redirect the customer back.
+    return_url: `${baseUrl}/success?orderNumber=${encodeURIComponent(metadata.orderNumber)}&tx_ref=${encodeURIComponent(metadata.orderNumber)}`,
+    tx_ref: metadata.orderNumber, // must be unique for every transaction
     first_name: payer.first,
     last_name: payer.last,
     email: metadata.customerEmail,
@@ -78,13 +96,16 @@ export async function createPayChanguCheckoutSession(
       title: `Order ${metadata.orderNumber}`,
       description: `Payment for order ${metadata.orderNumber}`,
     },
+    // minimal meta (optional) — keep it small to avoid validation issues
     meta: {
       orderNumber: metadata.orderNumber,
-      clerkUserId: metadata.clerkUserId,
-      address: metadata.address,
+      clerkUserId: metadata.clerkUserId ?? null,
+      address: metaAddress ?? null,
       products,
     },
   };
+
+  // NOTE: If you prefer to remove meta entirely (to rule out validation issues), delete the `meta` field above.
 
   const res = await fetch("https://api.paychangu.com/payment", {
     method: "POST",
@@ -99,19 +120,24 @@ export async function createPayChanguCheckoutSession(
   if (!res.ok) {
     const text = await res.text();
     console.error("PayChangu create payment error:", res.status, text);
-    throw new Error(`PayChangu responded with ${res.status}`);
+    // include response body in error for easier debugging in server logs
+    throw new Error(`PayChangu responded with ${res.status}: ${text}`);
   }
 
   const data = await res.json();
+
+  // PayChangu docs example returns checkout_url at data.checkout_url (or data.data.checkout_url)
   const paymentUrl =
+    data?.data?.checkout_url ||
     data?.data?.payment_url ||
-    data?.data?.redirect_url ||
+    data?.checkout_url ||
     data?.payment_url ||
+    data?.data?.redirect_url ||
     data?.redirect_url;
 
   if (!paymentUrl) {
     console.error("Unexpected PayChangu response:", JSON.stringify(data, null, 2));
-    throw new Error("Missing payment redirect URL");
+    throw new Error("Missing payment redirect URL in PayChangu response");
   }
 
   return paymentUrl;
