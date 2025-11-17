@@ -23,6 +23,7 @@ export type Address = {
   lastName: string;
   email?: string;
   operator:string;
+  operatorRefId?:string;
   phone: number;
   address?: string;
   city?: string;

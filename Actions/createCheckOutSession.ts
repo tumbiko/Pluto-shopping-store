@@ -107,7 +107,7 @@ export async function createPayChanguCheckoutSession(
 
   // NOTE: If you prefer to remove meta entirely (to rule out validation issues), delete the `meta` field above.
 
-  const res = await fetch("https://api.paychangu.com/payment", {
+  const res = await fetch("https://api.paychangu.com/mobile-money/payments/initialize", {
     method: "POST",
     headers: {
       Accept: "application/json",

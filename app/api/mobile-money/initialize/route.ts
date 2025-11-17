@@ -1,32 +1,27 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const body = await req.json();
+  const secretKey = process.env.PAYCHANGU_SECRET_KEY;
+
+  if (!secretKey) {
+    return NextResponse.json({ status: "failed", message: "Missing PAYCHANGU_SECRET_KEY" }, { status: 500 });
+  }
+
   try {
-    const body = await req.json();
-
-    const payload = {
-   
-      amount: String(body.amount),
-      charge_id: crypto.randomUUID(),
-      mobile_money_operator_ref_id: "20be6c20-adeb-4b5b-a7ba-0769820df4fb",
-      email: body.email,
-     
-    };
-
     const res = await fetch("https://api.paychangu.com/mobile-money/payments/initialize", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.PAYCHANGU_SECRET_KEY}`,
+        Authorization: `Bearer ${secretKey}`,
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(body),
     });
 
     const data = await res.json();
-
     return NextResponse.json(data);
   } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+    console.error("PayChangu mobile money error:", error);
+    return NextResponse.json({ status: "failed", message: "Payment initiation failed" }, { status: 500 });
   }
 }
