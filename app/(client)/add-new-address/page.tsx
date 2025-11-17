@@ -15,16 +15,29 @@ import { Pencil, Trash2, Home, Plus } from 'lucide-react'
 import Image from 'next/image'
 import { noaddress } from '@/images'
 
-interface Address {
+export interface Address {
   _id: string
-  name: string
+  firstName: string
+  lastName: string
+  email?: string
+  phone: string
+  operator: string   // <-- add this
   address: string
   city: string
   state: string
   zip: string
-  phone: string
   default: boolean
   userId: string
+}
+
+
+// Auto-detect operator based on Malawi phone prefixes
+const detectOperator = (phone: string) => {
+  const p = phone.replace(/\D/g, '')
+
+  if (p.startsWith('88') || p.startsWith('89')) return 'tnm'
+  if (p.startsWith('97') || p.startsWith('98') || p.startsWith('99')) return 'airtel'
+  return ''
 }
 
 const AddNewAddressPage = () => {
@@ -32,13 +45,17 @@ const AddNewAddressPage = () => {
   const router = useRouter()
   const [addresses, setAddresses] = useState<Address[]>([])
   const [loading, setLoading] = useState(false)
+  const [operators, setOperators] = useState<any[]>([])
+
   const [formData, setFormData] = useState({
-    name: user?.fullName ?? '',
+    firstName: user?.firstName ?? '',
+    lastName: user?.lastName ?? '',
     address: '',
     city: '',
     state: '',
     zip: '',
     phone: '',
+    operator: '',
     default: false,
   })
 
@@ -50,35 +67,55 @@ const AddNewAddressPage = () => {
       const data = await res.json()
       setAddresses(data)
     } catch (err) {
-      console.error("Failed to fetch addresses", err)
+      console.error('Failed to fetch addresses', err)
+    }
+  }
+
+  // Fetch PayChangu operators
+  const fetchOperators = async () => {
+    try {
+      const res = await fetch('/api/paychangu/operators')
+      const data = await res.json()
+      if (data.status === 'success') setOperators(data.data)
+    } catch (err) {
+      console.error('Failed to fetch operators', err)
     }
   }
 
   useEffect(() => {
-    if (user) fetchAddresses()
+    if (user) {
+      fetchAddresses()
+      fetchOperators()
+    }
   }, [user])
 
   // Add new address
   const handleAddAddress = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
+
     try {
       const res = await fetch('/api/addresses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...formData, userId: user?.id }),
       })
+
       if (!res.ok) throw new Error('Failed')
+
       toast.success('Address added!')
       setFormData({
-        name: user?.fullName ?? '',
+        firstName: user?.firstName ?? '',
+        lastName: user?.lastName ?? '',
         address: '',
         city: '',
         state: '',
         zip: '',
         phone: '',
+        operator: '',
         default: false,
       })
+
       fetchAddresses()
     } catch (err) {
       console.error(err)
@@ -88,13 +125,14 @@ const AddNewAddressPage = () => {
     }
   }
 
-  // Delete address
   const handleDelete = async (id: string) => {
-    const confirm = window.confirm('Delete this address?')
-    if (!confirm) return
+    const confirmDel = window.confirm('Delete this address?')
+    if (!confirmDel) return
+
     try {
       const res = await fetch(`/api/addresses/${id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error('Failed to delete')
+
       toast.success('Address deleted')
       setAddresses(addresses.filter(a => a._id !== id))
     } catch (err) {
@@ -103,40 +141,17 @@ const AddNewAddressPage = () => {
     }
   }
 
-  // Edit address
   const handleEdit = (id: string) => router.push(`/edit-address/${id}`)
 
-  // Toggle default
-  const handleDefaultToggle = async (id: string) => {
-  // Optimistically update state
-  setAddresses(prev =>
-    prev.map(addr => ({
-      ...addr,
-      default: addr._id === id,
+  // Handle phone change + auto-detect operator
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const phone = e.target.value
+    setFormData(prev => ({
+      ...prev,
+      phone,
+      operator: detectOperator(phone) || prev.operator,
     }))
-  )
-
-  try {
-    // Update backend
-    await Promise.all(
-      addresses.map(a =>
-        fetch(`/api/addresses/${a._id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ default: a._id === id }),
-        })
-      )
-    )
-    toast.success('Default address updated!')
-  } catch (err) {
-    console.error(err)
-    toast.error('Failed to set default')
-
-    // Revert if error
-    fetchAddresses()
   }
-}
-
 
   return (
     <Container>
@@ -146,7 +161,8 @@ const AddNewAddressPage = () => {
         </h1>
 
         <div className="grid md:grid-cols-2 gap-8">
-          {/* Left - Saved */}
+
+          {/* Left - Saved Addresses */}
           <div>
             <Card>
               <CardHeader>
@@ -158,16 +174,11 @@ const AddNewAddressPage = () => {
                     {addresses.map(addr => (
                       <div key={addr._id} className="p-4 border rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-gray-50 transition">
                         <div className="flex-1">
-                          <p className="font-semibold">{addr.name}</p>
+                          <p className="font-semibold">{addr.firstName} {addr.lastName}</p>
                           <p className="text-sm text-gray-600">{addr.address}, {addr.city}, {addr.state} {addr.zip}</p>
-                          <p className="text-sm text-gray-500">📞 {addr.phone}</p>
+                          <p className="text-sm text-gray-500">📞 {addr.phone} ({addr.operator})</p>
                         </div>
                         <div className="flex items-center gap-3">
-                          <Switch
-  checked={addr.default}
-  onCheckedChange={() => handleDefaultToggle(addr._id)}
-/>
-
                           <Pencil onClick={() => handleEdit(addr._id)} className="text-blue-600 cursor-pointer hover:text-blue-800" size={18} />
                           <Trash2 onClick={() => handleDelete(addr._id)} className="text-red-500 cursor-pointer hover:text-red-700" size={18} />
                         </div>
@@ -185,7 +196,7 @@ const AddNewAddressPage = () => {
             </Card>
           </div>
 
-          {/* Right - Add */}
+          {/* Right - Add New Address */}
           <div>
             <Card>
               <CardHeader>
@@ -195,32 +206,110 @@ const AddNewAddressPage = () => {
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleAddAddress} className="space-y-4">
-                  <div><Label htmlFor="name">Full Name</Label>
-                    <Input id="name" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
-                  </div>
-                  <div><Label htmlFor="address">Street Address</Label>
-                    <Input id="address" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} required />
-                  </div>
+
+                  {/* First + Last Name */}
                   <div className="grid grid-cols-2 gap-4">
-                    <div><Label htmlFor="city">City</Label>
-                      <Input id="city" value={formData.city} onChange={e => setFormData({...formData, city: e.target.value})} required />
+                    <div>
+                      <Label htmlFor="firstName">First Name</Label>
+                      <Input
+                        id="firstName"
+                        value={formData.firstName}
+                        onChange={e => setFormData({ ...formData, firstName: e.target.value })}
+                        required
+                      />
                     </div>
-                    <div><Label htmlFor="state">State / Region</Label>
-                      <Input id="state" value={formData.state} onChange={e => setFormData({...formData, state: e.target.value})} required />
+                    <div>
+                      <Label htmlFor="lastName">Last Name</Label>
+                      <Input
+                        id="lastName"
+                        value={formData.lastName}
+                        onChange={e => setFormData({ ...formData, lastName: e.target.value })}
+                        required
+                      />
                     </div>
                   </div>
+
+                  {/* Address */}
+                  <div>
+                    <Label htmlFor="address">Street Address</Label>
+                    <Input
+                      id="address"
+                      value={formData.address}
+                      onChange={e => setFormData({ ...formData, address: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  {/* City + State */}
                   <div className="grid grid-cols-2 gap-4">
-                    <div><Label htmlFor="zip">ZIP</Label>
-                      <Input id="zip" value={formData.zip} onChange={e => setFormData({...formData, zip: e.target.value})} required />
+                    <div>
+                      <Label htmlFor="city">City</Label>
+                      <Input
+                        id="city"
+                        value={formData.city}
+                        onChange={e => setFormData({ ...formData, city: e.target.value })}
+                        required
+                      />
                     </div>
-                    <div><Label htmlFor="phone">Phone</Label>
-                      <Input id="phone" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} required />
+                    <div>
+                      <Label htmlFor="state">State / Region</Label>
+                      <Input
+                        id="state"
+                        value={formData.state}
+                        onChange={e => setFormData({ ...formData, state: e.target.value })}
+                        required
+                      />
                     </div>
                   </div>
+
+                  {/* ZIP + Phone */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="zip">ZIP</Label>
+                      <Input
+                        id="zip"
+                        value={formData.zip}
+                        onChange={e => setFormData({ ...formData, zip: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="phone">Phone</Label>
+                      <Input
+                        id="phone"
+                        value={formData.phone}
+                        onChange={handlePhoneChange}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Operator Dropdown */}
+                  <div>
+                    <Label htmlFor="operator">Mobile Money Operator</Label>
+                    <select
+                      id="operator"
+                      value={formData.operator}
+                      onChange={e => setFormData({ ...formData, operator: e.target.value })}
+                      className="w-full p-2 border"
+                      required
+                    >
+                      <option value="">Select operator</option>
+                      {operators.map(op => (
+                        <option key={op.id} value={op.short_code}>{op.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Default Switch */}
                   <div className="flex items-center justify-between">
                     <Label htmlFor="default">Set as default</Label>
-                    <Switch checked={formData.default} onCheckedChange={checked => setFormData({...formData, default: checked})} />
+                    <Switch
+                      checked={formData.default}
+                      onCheckedChange={checked => setFormData({ ...formData, default: checked })}
+                    />
                   </div>
+
                   <Separator />
                   <Button type="submit" disabled={loading} className="w-full font-semibold rounded-full">
                     {loading ? 'Saving...' : 'Save Address'}
@@ -229,6 +318,7 @@ const AddNewAddressPage = () => {
               </CardContent>
             </Card>
           </div>
+
         </div>
       </div>
     </Container>

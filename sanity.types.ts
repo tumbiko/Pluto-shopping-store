@@ -19,8 +19,10 @@ export type Address = {
   _createdAt: string;
   _updatedAt: string;
   _rev: string;
-  name?: string;
+  firstName: string;
+  lastName: string;
   email?: string;
+  operator:string;
   phone: number;
   address?: string;
   city?: string;

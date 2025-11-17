@@ -28,7 +28,19 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 
+interface Operator {
+  id: number;
+  name: string;
+  short_code: string;
+  ref_id?: string;
+  logo?: string | null;
+}
+
+
+
+
 const CartPage = () => {
+  const [operators, setOperators] = useState<Operator[]>([]);
   const {
     deleteCartProduct,
     getTotalPrice,
@@ -48,7 +60,20 @@ const CartPage = () => {
     if (!user) return;
     setLoading(true);
     try {
-      const query = `*[_type=="address" && userId == $userId] | order(publishedAt desc)`;
+      const query = `*[_type=="address" && userId == $userId] | order(publishedAt desc){
+  _id,
+  firstName,
+  lastName,
+  email,
+  phone,
+  operator,   // <-- include this
+  address,
+  city,
+  state,
+  zip,
+  default
+}`;
+
       const data: Address[] = await client.fetch(query, { userId: user.id });
       setAddresses(data);
       const defaultAddress = data.find(addr => addr.default);
@@ -73,6 +98,17 @@ const CartPage = () => {
     }
   };
 
+useEffect(() => {
+  async function loadOps() {
+    const res = await fetch("/api/paychangu/operators");
+    const data = await res.json();
+    if (data.status === "success") {
+      setOperators(data.data); // full operator list
+    }
+  }
+  loadOps();
+}, []);
+
 
 const handleCheckout = async () => {
   if (!selectedAddress) {
@@ -89,32 +125,37 @@ const handleCheckout = async () => {
   setLoading(true);
 
   try {
-    // Normalize phone number to +265XXXXXXXXX
+    // Use phone exactly as stored in Sanity
     let phone = selectedAddress.phone?.toString().trim();
     if (!phone) throw new Error("Selected address does not have a phone number");
 
-    if (!phone.startsWith("+265")) {
-      if (phone.startsWith("0")) phone = phone.slice(1);
-      phone = `+265${phone}`;
+    // Validation only — ensure numeric digits
+    const rawDigits = phone.replace(/\D/g, "");
+    if (![9, 10, 12].includes(rawDigits.length)) {
+      toast.error("Please enter a valid mobile number");
+      setLoading(false);
+      return;
     }
 
-    if (!/^\+265\d{9}$/.test(phone)) {
-      toast.error("Please enter a valid mobile number in the format +265XXXXXXXXX");
+    // Use operator from selectedAddress
+    const operator = selectedAddress.operator;
+    if (!operator) {
+      toast.error("Selected address does not have a mobile money operator.");
       setLoading(false);
       return;
     }
 
     const payload = {
-      mobile: phone,
-      amount: getTotalPrice(), // make sure this returns a number
-      email: userEmail,
-      first_name: selectedAddress.name || "Customer",
-      last_name: "",
-    };
+  mobile: phone.startsWith("+") ? phone : `+265${phone.replace(/\D/g, "")}`,
+  amount: getTotalPrice(),      // in MWK
+  email: userEmail,
+  first_name: selectedAddress.firstName || "Customer",
+  last_name: selectedAddress.lastName || "",
+  operator: selectedAddress.operator?.toLowerCase(), // tnm or airtel
+};
 
     console.log("📌 Checkout payload:", payload);
 
-    // Call your API route
     const res = await fetch("/api/paychangu/mobile-money", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -126,16 +167,21 @@ const handleCheckout = async () => {
 
     if (!res.ok || data.status === "failed") {
       toast.error(data.message || "Payment failed to start.");
+      setLoading(false);
       return;
     }
 
     toast.success("Payment request sent. Please approve the charge on your phone.");
-
-    // Optionally, redirect to a success page or show a payment status modal
   } catch (error: unknown) {
-  console.error("❌ PayChangu API error:", error);
-}
+    console.error("❌ PayChangu API error:", error);
+    toast.error("An error occurred while initiating payment.");
+  } finally {
+    setLoading(false);
+  }
 };
+
+
+
 
 
 
@@ -280,7 +326,8 @@ const handleCheckout = async () => {
                                 >
                                   <RadioGroupItem value={address?._id.toString()} />
                                   <Label htmlFor={`address-${address?._id}`} className="grid gap-1.5 flex-1">
-                                    <span className="font-semibold">{address?.name}</span>
+                                    <span className="font-semibold">{address?.firstName}</span>
+                                    <span className="font-semibold">{address?.lastName}</span>
                                     <span className="text-sm text-black/60 dark:text-gray-400">
                                       {address.address}, {address.city}, {address.state} {address.zip}
                                     </span>
@@ -314,6 +361,25 @@ const handleCheckout = async () => {
                         <span>Total</span>
                         <PriceFormatter amount={getTotalPrice()} className="text-lg font-bold text-black dark:text-gray-200" />
                       </div>
+<select
+  value={selectedAddress?.operator || ""}
+  onChange={(e) =>
+    setSelectedAddress({ ...selectedAddress!, operator: e.target.value })
+  }
+  className="w-full p-2 border rounded"
+>
+  <option value="" disabled>
+    Select Mobile Money Operator
+  </option>
+  {operators.map((op) => (
+    <option key={op.id} value={op.short_code}>
+      {op.name}
+    </option>
+  ))}
+</select>
+
+
+
                     </div>
 
                     {!selectedAddress && <AddNewAddress />}
