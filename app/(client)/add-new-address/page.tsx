@@ -125,25 +125,30 @@ const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
   const operatorRefId = selectedOperator?.ref_id || ''
 
   try {
-    const res = await fetch('/api/addresses', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...formData, operatorRefId, userId: user?.id }),
-    })
-    if (!res.ok) throw new Error('Failed to save')
-    toast.success('Address added!')
-    setFormData({
-      firstName: user?.firstName ?? '',
-      lastName: user?.lastName ?? '',
-      address: '',
-      city: '',
-      state: '',
-      zip: '',
-      phone: '',
-      operator: '', // reset
-      default: false,
-    })
-    await fetchAddresses()
+    // inside handleAddAddress (temporary debug)
+const res = await fetch('/api/addresses', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ ...formData, operatorRefId, userId: user?.id }),
+});
+
+if (!res.ok) {
+  // try to read JSON first, fallback to text
+  let body;
+  try {
+    body = await res.json();
+  } catch {
+    body = await res.text().catch(() => "<no body>");
+  }
+  console.error('Save address failed', res.status, body);
+  toast.error(`Failed to add address: ${res.status} — ${typeof body === 'string' ? body : JSON.stringify(body)}`);
+  setLoading(false);
+  return;
+}
+
+const created = await res.json();
+console.log('Address created', created);
+
   } catch (err) {
     console.error(err)
     toast.error('Failed to add address')
