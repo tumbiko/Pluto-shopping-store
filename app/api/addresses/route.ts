@@ -59,22 +59,23 @@ async function fetchOperatorsFromPayChangu(): Promise<Operator[]> {
     });
 
     if (!res.ok) {
-      const text = await res.text();
+      const text = await res.text().catch(() => "<could not read body>");
       console.error("PayChangu operators fetch failed:", res.status, text);
       return [];
     }
 
-    const json = await res.json();
-    const ops: Operator[] = Array.isArray(json.data)
-      ? json.data
+    const json = await res.json().catch(() => null);
+    const ops: Operator[] = Array.isArray(json?.data)
+      ? json!.data
       : Array.isArray(json)
       ? json
       : [];
 
     _operatorsCache = { ts: Date.now(), data: ops };
     return ops;
-  } catch (error: unknown) {
-    console.error("Error fetching PayChangu operators:", error);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("Error fetching PayChangu operators:", message);
     return [];
   }
 }
@@ -126,9 +127,10 @@ export async function POST(req: NextRequest) {
 
     const created = await writeClient.create(doc);
     return NextResponse.json({ status: "success", data: created }, { status: 201 });
-  } catch (error: unknown) {
-    console.error("API Error (create address):", error);
-    const message = error instanceof Error ? error.message : String(error);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    // Log server side for Vercel function logs
+    console.error("API Error (create address):", message);
     return NextResponse.json(
       { error: "Failed to add address", details: message },
       { status: 500 }
@@ -166,9 +168,9 @@ export async function GET(req: NextRequest) {
     const addresses = await client.fetch(query, { userId });
 
     return NextResponse.json({ status: "success", data: addresses });
-  } catch (error: unknown) {
-    console.error("Failed to fetch addresses:", error);
-    const message = error instanceof Error ? error.message : String(error);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("Failed to fetch addresses:", message);
     return NextResponse.json(
       { error: "Failed to fetch addresses", details: message },
       { status: 500 }
