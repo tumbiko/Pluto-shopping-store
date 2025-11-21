@@ -59,12 +59,19 @@ async function fetchOperatorsFromPayChangu(): Promise<Operator[]> {
       return [];
     }
 
-    const json = await res.json().catch(() => null);
-    const ops: Operator[] = Array.isArray(json?.data)
-      ? json!.data
-      : Array.isArray(json)
-      ? json
-      : [];
+    // parse as unknown and narrow below
+    const json: unknown = await res.json().catch(() => null);
+
+    // try to normalize to Operator[]
+    let ops: Operator[] = [];
+    if (json && typeof json === "object") {
+      const maybe = json as { data?: unknown };
+      if (Array.isArray(maybe.data)) {
+        ops = maybe.data as Operator[];
+      } else if (Array.isArray(json)) {
+        ops = json as Operator[];
+      }
+    }
 
     _operatorsCache = { ts: Date.now(), data: ops };
     return ops;
@@ -96,7 +103,6 @@ async function resolveOperatorRefId(operator?: string, phone?: string): Promise<
   // fallback: try basic detection by phone prefix (small heuristic)
   if (phone) {
     const p = phone.replace(/\D/g, "");
-    // example mapping (same as front-end)
     if (p.startsWith("88") || p.startsWith("89")) {
       const tnm = operators.find((o) => String(o.short_code).toLowerCase() === "tnm");
       return tnm?.ref_id ?? null;
@@ -115,21 +121,17 @@ async function resolveOperatorRefId(operator?: string, phone?: string): Promise<
  */
 async function unsetOtherDefaultsForUser(userId: string, keepId?: string) {
   try {
-    // fetch addresses that are default=true for this user
     const q = `*[_type == "address" && userId == $userId && default == true]{ _id }`;
     const currentDefaults: { _id: string }[] = await client.fetch(q, { userId });
 
     const toUnset = currentDefaults.filter((d) => d._id !== keepId);
     if (!toUnset.length) return;
 
-    // patch each to set default:false
-    const patches = toUnset.map((d) =>
-      writeClient.patch(d._id).set({ default: false }).commit()
-    );
+    const patches = toUnset.map((d) => writeClient.patch(d._id).set({ default: false }).commit());
     await Promise.all(patches);
   } catch (err) {
     console.error("Failed to unset other defaults:", err);
-    // don't throw — we don't want to block the main operation, but log for debugging
+    // do not block main operation; just log
   }
 }
 
@@ -147,35 +149,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing phone" }, { status: 400 });
     }
 
-    // Map operator to operatorRefId (if possible)
     const operatorRefId = (await resolveOperatorRefId(data.operator, data.phone)) ?? null;
-    
-    // replace the `const doc: Record<string, unknown> = { ... }` line
-const doc = {
-  _type: "address",
-  firstName: data.firstName ?? "",
-  lastName: data.lastName ?? "",
-  email: data.email ?? "",
-  phone: data.phone,
-  operator: data.operator ?? "",
-  operatorRefId,
-  address: data.address ?? "",
-  city: data.city ?? "",
-  state: data.state ?? "",
-  zip: data.zip ?? "",
-  default: !!data.default,
-  userId: data.userId,
-  createdAt: new Date().toISOString(),
-} as { _type: "address"; [key: string]: any };
 
+    // ensure doc includes _type so Sanity types are satisfied
+    const doc = {
+      _type: "address",
+      firstName: data.firstName ?? "",
+      lastName: data.lastName ?? "",
+      email: data.email ?? "",
+      phone: data.phone,
+      operator: data.operator ?? "",
+      operatorRefId,
+      address: data.address ?? "",
+      city: data.city ?? "",
+      state: data.state ?? "",
+      zip: data.zip ?? "",
+      default: !!data.default,
+      userId: data.userId,
+      createdAt: new Date().toISOString(),
+    } as { _type: "address"; [k: string]: unknown };
 
-    // If incoming default === true, unset other defaults for this user first
     if (doc.default === true) {
       await unsetOtherDefaultsForUser(String(data.userId));
     }
 
     const created = await writeClient.create(doc);
-
     return NextResponse.json(created, { status: 201 });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
@@ -186,9 +184,7 @@ const doc = {
 
 /**
  * GET: Fetch addresses by userId
- *
- * NOTE: returns a plain array (not wrapped in a {status,data} object) so front-end can do:
- * const list = await fetch(`/api/addresses?userId=${id}`).then(r => r.json())
+ * returns plain array
  */
 export async function GET(req: NextRequest) {
   try {
@@ -199,7 +195,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Missing userId" }, { status: 400 });
     }
 
-    // Order by creation time
     const query = `*[_type=="address" && userId == $userId] | order(_createdAt desc){
       _id,
       firstName,
@@ -218,8 +213,6 @@ export async function GET(req: NextRequest) {
     }`;
 
     const addresses = await client.fetch(query, { userId });
-
-    // return the array directly (200)
     return NextResponse.json(addresses);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
@@ -236,36 +229,45 @@ export async function GET(req: NextRequest) {
  */
 export async function PATCH(req: NextRequest) {
   try {
-    const body = await req.json();
-    const id: string | undefined = body?.id;
-    const updates: Partial<AddressPayload & { operatorRefId?: string; operatorName?: string; userId?:string }> =
-      body?.updates ?? {};
+    const body: unknown = await req.json();
+
+    // narrow body safely
+    const bodyObj = (body && typeof body === "object" ? (body as { [k: string]: unknown }) : {}) as {
+      id?: string;
+      updates?: Record<string, unknown>;
+    };
+
+    const id: string | undefined = bodyObj.id;
+    const updates = (bodyObj.updates ?? {}) as Partial<
+      AddressPayload & { operatorRefId?: string; operatorName?: string; userId?: string }
+    >;
 
     if (!id) {
       return NextResponse.json({ error: "Missing id" }, { status: 400 });
     }
 
-    // If operator was passed as some identifier, try to resolve ref_id if not provided
+    // If operator passed but operatorRefId not present, try resolving
     if (updates.operator && !updates.operatorRefId) {
       const maybeRef = await resolveOperatorRefId(updates.operator, updates.phone);
       if (maybeRef) updates.operatorRefId = maybeRef;
     }
 
-    // Fetch address to get userId if needed
-    let existing: any = null;
+    // Fetch existing address for userId if needed; narrow to record
+    let existing: Record<string, unknown> | null = null;
     try {
-      existing = await client.fetch('*[_type=="address" && _id==$id][0]', { id });
-    } catch (e) {
-      // ignore; existing may be null and we handle later
+      const fetched = await client.fetch('*[_type=="address" && _id==$id][0]', { id });
+      if (fetched && typeof fetched === "object") {
+        existing = fetched as Record<string, unknown>;
+      }
+    } catch {
+      existing = null;
     }
 
-    // If setting default=true, unset other defaults first (we need userId)
-    const userId = updates.userId ?? existing?.userId;
+    const userId = updates.userId ?? (existing ? String(existing["userId"] ?? "") : undefined);
     if (updates.default === true && userId) {
       await unsetOtherDefaultsForUser(String(userId), id);
     }
 
-    // Apply patch
     const patch = writeClient.patch(id).set(updates);
     const updated = await patch.commit();
 
