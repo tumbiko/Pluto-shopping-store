@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { writeClient, client } from "@/sanity/lib/client";
+import { writeClient} from "@/sanity/lib/writeclient";
+import {client} from "@/sanity/lib/client"
 
 /**
  * Operator type from PayChangu API
