@@ -161,96 +161,67 @@ const CartPage: React.FC = () => {
 
   // Checkout using PayChangu mobile-money initialize endpoint via server route
   const handleCheckout = async () => {
-    if (!selectedAddress) {
-      toast.error("Please select an address first.");
+  if (!selectedAddress) {
+    toast.error("Please select an address first.");
+    return;
+  }
+
+  const operatorRefId = selectedOperatorRefId || resolveOperatorRefId(selectedAddress);
+  if (!operatorRefId) {
+    toast.error("Selected address does not have a mobile money operator configured.");
+    return;
+  }
+
+  const userEmail = user?.emailAddresses?.[0]?.emailAddress;
+  if (!userEmail) {
+    toast.error("Please add an email to your profile for payment notifications.");
+    return;
+  }
+
+  setLoading(true);
+
+  try {
+    const mobile = selectedAddress.phone;
+    const amount = Number(getTotalPrice());
+    const chargeId = `order-${Date.now()}`;
+
+    const payload = {
+      mobile,
+      mobile_money_operator_ref_id: operatorRefId,
+      amount: amount.toString(),
+      charge_id: chargeId,
+      email: userEmail,
+      first_name: selectedAddress.firstName || user?.firstName || "",
+      last_name: selectedAddress.lastName || user?.lastName || "",
+    };
+
+    const res = await fetch("/api/mobile-money/initialize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json();
+    console.log("📤 Mobile Money charge response:", data);
+
+    // ⭐ NEW – redirect based on PayChangu response
+    if (!res.ok || data.status !== "success") {
+      window.location.href = "/payment/failed";
       return;
     }
 
-    const operatorRefId = selectedOperatorRefId || resolveOperatorRefId(selectedAddress);
-    if (!operatorRefId) {
-      toast.error(
-        "Selected address does not have a mobile money operator configured. Please set one in the address or choose an operator."
-      );
-      return;
-    }
+    // SUCCESS → redirect to success page
+    window.location.href = `/success?ref=${data?.data?.reference || ""}`;
+    return;
 
-    const userEmail = user?.emailAddresses?.[0]?.emailAddress;
-    if (!userEmail) {
-      toast.error("Please add an email to your profile for payment notifications.");
-      return;
-    }
+  } catch (error) {
+    console.error("❌ PayChangu API error:", error);
+    window.location.href = "/failed"; // ⭐ NEW – on error redirect to failure page
+  } finally {
+    setLoading(false);
+  }
+};
 
-    setLoading(true);
-
-    try {
-      const rawPhone = (selectedAddress.phone || "").toString().trim();
-      if (!rawPhone) throw new Error("Selected address does not have a phone number");
-
-      // Keep simple normalization: remove non-digits
-      let digits = rawPhone.replace(/\D/g, "");
-
-      // If user entered 09XXXXXXXX (10 digits with leading 0), remove leading '0'
-      if (digits.length === 10 && digits.startsWith("0")) {
-        digits = digits.slice(1);
-      }
-
-      // Validate Malawian 9-digit numbers after normalization
-      if (digits.length !== 9) {
-        toast.error("Please enter a valid 9-digit Malawian mobile number on the selected address");
-        setLoading(false);
-        return;
-      }
-
-      // Prepend country code if your server expects it, but we send original phone value here
-      const mobile = selectedAddress.phone;
-
-      // Ensure amount is string
-      const amount = Number(getTotalPrice());
-      if (Number.isNaN(amount)) {
-        toast.error("Invalid order total");
-        setLoading(false);
-        return;
-      }
-
-      const chargeId = `order-${Date.now()}`;
-
-      const payload = {
-        mobile,
-        mobile_money_operator_ref_id: operatorRefId,
-        amount: amount.toString(),
-        charge_id: chargeId,
-        email: userEmail,
-        first_name: selectedAddress.firstName || user?.firstName || "",
-        last_name: selectedAddress.lastName || user?.lastName || "",
-      };
-
-      console.log("📌 Mobile Money payload:", payload);
-
-      const res = await fetch("/api/mobile-money/initialize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-      console.log("📤 Mobile Money charge response:", data);
-
-      if (!res.ok || data.status !== "success") {
-        const message = data?.message;
-        const mobileErr = message?.mobile?.[0];
-        toast.error(mobileErr || message || "Payment failed to start.");
-        setLoading(false);
-        return;
-      }
-
-      toast.success("Payment request sent. Please approve the charge on your phone.");
-    } catch (error) {
-      console.error("❌ PayChangu API error:", error);
-      toast.error("An error occurred while initiating payment.");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Render
   return (

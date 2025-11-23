@@ -18,43 +18,70 @@ const SuccessPageContent = () => {
   const [verified, setVerified] = useState(false);
   const [verifying, setVerifying] = useState(true);
 
+  // Reset cart if orderNumber exists
   useEffect(() => {
-    if (orderNumber) {
-      resetCart();
-    }
+    if (orderNumber) resetCart();
   }, [orderNumber, resetCart]);
 
-  // Optional: Verify payment with your backend (recommended)
+  // Helper to detect success in any string format
+  const isStatusSuccess = (value?: string | null) => {
+    if (!value) return false;
+    const s = value.toLowerCase();
+    return (
+      s === "success" ||
+      s === "successful" ||
+      s === "paid" ||
+      s === "completed"
+    );
+  };
+
+  // Verify payment with backend
   useEffect(() => {
     const verifyPayment = async () => {
       try {
-        const res = await fetch(`/api/paychangu/verify?tx_ref=${tx_ref || orderNumber}`);
+        const res = await fetch(
+          `/api/paychangu/verify?tx_ref=${tx_ref || orderNumber}`
+        );
         const data = await res.json();
-        if (data?.status === "success" || data?.payment_status === "successful") {
-          setVerified(true);
-        }
+
+        console.log("🔍 Verify response:", data);
+
+        const paid =
+          isStatusSuccess(data?.status) ||
+          isStatusSuccess(data?.payment_status) ||
+          isStatusSuccess(data?.data?.status) ||
+          isStatusSuccess(data?.data?.payment_status);
+
+        setVerified(paid);
       } catch (err) {
         console.error("Verification failed:", err);
+        setVerified(false);
       } finally {
         setVerifying(false);
       }
     };
 
     if (tx_ref || orderNumber) verifyPayment();
+    else setVerifying(false); // No tx_ref/orderNumber -> stop verifying
   }, [tx_ref, orderNumber]);
 
-  const isSuccess =
-    verified || status === "successful" || status === "success";
+  // Determine success
+  const isSuccess = verified || isStatusSuccess(status);
 
   return (
-    <div className="py-5 bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center mx-4">
+    <div className="py-5 bg-linear-to-br from-gray-50 to-gray-100 flex items-center justify-center mx-4">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
         className="bg-white rounded-2xl flex flex-col gap-8 shadow-2xl p-6 max-w-xl w-full text-center"
       >
-        {isSuccess ? (
+        {/* Status Icon */}
+        {verifying ? (
+          <p className="text-gray-700 text-center py-10">
+            Verifying payment...
+          </p>
+        ) : isSuccess ? (
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
@@ -74,19 +101,17 @@ const SuccessPageContent = () => {
           </motion.div>
         )}
 
-        <h1 className="text-3xl font-bold text-gray-900 mb-4">
-          {isSuccess ? "Payment Successful!" : "Payment Failed"}
-        </h1>
-
-        <div className="space-y-4 mb-4 text-left">
-          {verifying ? (
-            <p className="text-gray-700">Verifying payment...</p>
-          ) : (
-            <>
+        {/* Status Message */}
+        {!verifying && (
+          <>
+            <h1 className="text-3xl font-bold text-gray-900 mb-4">
+              {isSuccess ? "Payment Successful!" : "Payment Failed"}
+            </h1>
+            <div className="space-y-4 mb-4 text-left">
               <p className="text-gray-700">
                 {isSuccess
-                  ? "Thank you for your purchase. We're processing your order and will ship it soon."
-                  : "Something went wrong. If payment was deducted, please contact support."}
+                  ? "Thank you! Your payment was successful and your order is now being processed."
+                  : "Payment did not complete. If funds were deducted, please contact support."}
               </p>
               <p className="text-gray-700">
                 Order Number:{" "}
@@ -102,33 +127,36 @@ const SuccessPageContent = () => {
                   </span>
                 </p>
               )}
-            </>
-          )}
-        </div>
+            </div>
+          </>
+        )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Link
-            href="/"
-            className="flex items-center justify-center px-4 py-3 font-semibold bg-black text-white rounded-lg hover:bg-gray-800 transition-all duration-300 shadow-md"
-          >
-            <Home className="w-5 h-5 mr-2" />
-            Home
-          </Link>
-          <Link
-            href="/orders"
-            className="flex items-center justify-center px-4 py-3 font-semibold bg-lightGreen text-black border border-lightGreen rounded-lg hover:bg-gray-100 transition-all duration-300 shadow-md"
-          >
-            <Package className="w-5 h-5 mr-2" />
-            Orders
-          </Link>
-          <Link
-            href="/"
-            className="flex items-center justify-center px-4 py-3 font-semibold bg-black text-white rounded-lg hover:bg-gray-800 transition-all duration-300 shadow-md"
-          >
-            <ShoppingBag className="w-5 h-5 mr-2" />
-            Shop
-          </Link>
-        </div>
+        {/* Navigation Buttons */}
+        {!verifying && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Link
+              href="/"
+              className="flex items-center justify-center px-4 py-3 font-semibold bg-black text-white rounded-lg hover:bg-gray-800 transition-all duration-300 shadow-md"
+            >
+              <Home className="w-5 h-5 mr-2" />
+              Home
+            </Link>
+            <Link
+              href="/orders"
+              className="flex items-center justify-center px-4 py-3 font-semibold bg-lightGreen text-black border border-lightGreen rounded-lg hover:bg-gray-100 transition-all duration-300 shadow-md"
+            >
+              <Package className="w-5 h-5 mr-2" />
+              Orders
+            </Link>
+            <Link
+              href="/"
+              className="flex items-center justify-center px-4 py-3 font-semibold bg-black text-white rounded-lg hover:bg-gray-800 transition-all duration-300 shadow-md"
+            >
+              <ShoppingBag className="w-5 h-5 mr-2" />
+              Shop
+            </Link>
+          </div>
+        )}
       </motion.div>
     </div>
   );
