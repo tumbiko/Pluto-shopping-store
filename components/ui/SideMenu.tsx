@@ -6,6 +6,7 @@ import { headerData } from '@/constants/data';
 import { usePathname } from 'next/navigation';
 import SocialMedia from './SocialMedia';
 import { useOutsideClick } from '@/hooks';
+import { cn } from '@/lib/utils';
 
 interface SideBarProps {
   isOpen: boolean;
@@ -73,6 +74,16 @@ const SideMenu: FC<SideBarProps> = ({ isOpen, onClose }) => {
               {item?.name}
             </Link>
           ))}
+           {/* Track Delivery Link */}
+  <Link
+    href="/trackdelivery"
+    onClick={onClose}
+    className={`hover:text-yellow-400 ${
+      pathname === '/track-delivery' ? 'text-yellow-400' : ''
+    }`}
+  >
+    Track Delivery
+  </Link>
         </div>
 
         {/* Social Media */}

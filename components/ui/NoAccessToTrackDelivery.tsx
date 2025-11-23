@@ -4,8 +4,8 @@ import Logo from './Logo'
 import { SignInButton, SignUpButton } from '@clerk/nextjs'
 import { Button } from './button'
 
-const NoAccessToCart = ({
-  details = "Log in to view your cart items and checkout. Don't miss out on your favorite products!"
+const NoAccessToTrackDelivery = ({
+  details = "Log in to track your products delivery status. Don't miss out on your favorite products!"
 }: { details?: string }) => {
   return (
     <div className='flex items-center justify-center py-12 md:py-32 bg-gray-100 dark:bg-gray-900 p-4'>
@@ -39,4 +39,4 @@ const NoAccessToCart = ({
   )
 }
 
-export default NoAccessToCart
+export default NoAccessToTrackDelivery
