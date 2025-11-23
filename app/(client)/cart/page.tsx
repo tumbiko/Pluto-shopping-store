@@ -159,8 +159,8 @@ const CartPage: React.FC = () => {
     }
   };
 
-  // Checkout using PayChangu mobile-money initialize endpoint via server route
-  const handleCheckout = async () => {
+ // Checkout using PayChangu mobile-money initialize endpoint via server route
+const handleCheckout = async () => {
   if (!selectedAddress) {
     toast.error("Please select an address first.");
     return;
@@ -183,6 +183,12 @@ const CartPage: React.FC = () => {
   try {
     const mobile = selectedAddress.phone;
     const amount = Number(getTotalPrice());
+    if (Number.isNaN(amount)) {
+      toast.error("Invalid order total");
+      setLoading(false);
+      return;
+    }
+
     const chargeId = `order-${Date.now()}`;
 
     const payload = {
@@ -202,25 +208,49 @@ const CartPage: React.FC = () => {
     });
 
     const data = await res.json();
-    console.log("📤 Mobile Money charge response:", data);
 
-    // ⭐ NEW – redirect based on PayChangu response
     if (!res.ok || data.status !== "success") {
-      window.location.href = "/payment/failed";
+      toast.error(data?.message || "Payment failed to start.");
+      setLoading(false);
       return;
     }
 
-    // SUCCESS → redirect to success page
-    window.location.href = `/success?ref=${data?.data?.reference || ""}`;
-    return;
+    toast.success("Payment request sent. Please approve on your phone...");
 
-  } catch (error) {
-    console.error("❌ PayChangu API error:", error);
-    window.location.href = "/failed"; // ⭐ NEW – on error redirect to failure page
+    // ---- POLLING TO VERIFY PAYMENT ----
+    const pollInterval = 3000; // 3 seconds
+    const maxAttempts = 20; // ~1 minute max
+    let attempts = 0;
+
+    const intervalId = setInterval(async () => {
+      attempts++;
+      try {
+        const verifyRes = await fetch(`/api/paychangu/verify?tx_ref=${data.reference}`);
+        const verifyData = await verifyRes.json();
+
+        if (verifyData.status === "success" || verifyData.payment_status === "successful") {
+          clearInterval(intervalId);
+          resetCart();
+          window.location.href = `/success?tx_ref=${data.reference}&orderNumber=${chargeId}&transaction_id=${verifyData.transaction_id}`;
+        } else if (attempts >= maxAttempts) {
+          clearInterval(intervalId);
+          window.location.href = `/payment/failed?orderNumber=${chargeId}`;
+        }
+      } catch (err) {
+        console.error("Error verifying payment:", err);
+        clearInterval(intervalId);
+        window.location.href = `/payment/failed?orderNumber=${chargeId}`;
+      }
+    }, pollInterval);
+
+  } catch (err) {
+    console.error("Checkout error:", err);
+    toast.error("An error occurred while initiating payment.");
   } finally {
     setLoading(false);
   }
 };
+
 
 
   // Render
