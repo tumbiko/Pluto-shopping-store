@@ -1,6 +1,5 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { Check, X, Home, Package, ShoppingBag } from "lucide-react";
@@ -9,34 +8,45 @@ import useStore from "@/store";
 
 const SuccessPage = () => {
   const { resetCart } = useStore();
-  const searchParams = useSearchParams();
-  const orderNumber = searchParams.get("orderNumber");
-  const tx_ref = searchParams.get("tx_ref");
-  const transactionId = searchParams.get("transaction_id");
-
   const [verified, setVerified] = useState(false);
   const [verifying, setVerifying] = useState(true);
 
+  const [orderNumber, setOrderNumber] = useState<string | null>(null);
+  const [txRef, setTxRef] = useState<string | null>(null);
+  const [transactionId, setTransactionId] = useState<string | null>(null);
+
+  // Get search params on client
   useEffect(() => {
-    if (orderNumber) resetCart();
+    const params = new URLSearchParams(window.location.search);
+    const order = params.get("orderNumber");
+    const tx_ref = params.get("tx_ref");
+    const tId = params.get("transaction_id");
 
-    const verifyPayment = async () => {
-      try {
-        const res = await fetch(`/api/paychangu/verify?tx_ref=${tx_ref || orderNumber}`);
-        const data = await res.json();
+    setOrderNumber(order);
+    setTxRef(tx_ref);
+    setTransactionId(tId);
 
-        if (data.status === "success" || data.payment_status === "successful") {
-          setVerified(true);
+    if (order) resetCart();
+
+    if (tx_ref || order) {
+      const verifyPayment = async () => {
+        try {
+          const res = await fetch(`/api/paychangu/verify?tx_ref=${tx_ref || order}`);
+          const data = await res.json();
+          if (data.status === "success" || data.payment_status === "successful") {
+            setVerified(true);
+          }
+        } catch (err) {
+          console.error("Verification failed:", err);
+        } finally {
+          setVerifying(false);
         }
-      } catch (err) {
-        console.error("Verification failed:", err);
-      } finally {
-        setVerifying(false);
-      }
-    };
-
-    if (tx_ref || orderNumber) verifyPayment();
-  }, [orderNumber, tx_ref, resetCart]);
+      };
+      verifyPayment();
+    } else {
+      setVerifying(false);
+    }
+  }, [resetCart]);
 
   const isSuccess = verified;
 
@@ -71,7 +81,7 @@ const SuccessPage = () => {
                   : "Something went wrong. If payment was deducted, please contact support."}
               </p>
               <p className="text-gray-700">
-                Order Number: <span className="text-black font-semibold">{orderNumber || tx_ref}</span>
+                Order Number: <span className="text-black font-semibold">{orderNumber || txRef}</span>
               </p>
               {transactionId && (
                 <p className="text-gray-700">
