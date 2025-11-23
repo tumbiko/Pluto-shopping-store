@@ -1,11 +1,9 @@
 import { createClient } from 'next-sanity'
 
-// FRONTEND client (browser-safe)
-import { projectId, dataset, apiVersion } from '../env'
-
 export const client = createClient({
-  projectId,
-  dataset,
-  apiVersion,
-  useCdn: true,
+  projectId: process.env.NEXT_PUBLIC_SANITY_PROJECT_ID!,
+  dataset: process.env.NEXT_PUBLIC_SANITY_DATASET!,
+  apiVersion: "2023-01-01",
+  useCdn: false,
+  token: process.env.SANITY_WRITE_TOKEN, // optional
 })
