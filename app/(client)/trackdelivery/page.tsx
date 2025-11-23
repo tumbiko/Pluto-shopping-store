@@ -1,31 +1,35 @@
-"use client"
+"use client";
 
-import React, { useState } from "react"
-import { useUser } from "@clerk/nextjs"
-import { Search, ChevronRight } from "lucide-react"
-import NoAccessToTrackDelivery from "@/components/ui/NoAccessToTrackDelivery"
-import Container from "@/components/Container"
-import Link from "next/link"
+import React, { useState } from "react";
+import { useUser } from "@clerk/nextjs";
+import { Search } from "lucide-react"; // ⬅ ChevronRight removed
+import NoAccessToTrackDelivery from "@/components/ui/NoAccessToTrackDelivery";
+import Container from "@/components/Container";
+import Link from "next/link";
+
+// Temporary Order type
+type Order = Record<string, unknown>;
 
 export default function TrackDeliveryPage() {
-  const { isLoaded, isSignedIn } = useUser()
-  const [activeTab, setActiveTab] = useState("all")
+  const { isLoaded, isSignedIn } = useUser();
+  const [activeTab, setActiveTab] = useState("all");
+
   const tabs = [
     { key: "all", label: "View all" },
     { key: "to_pay", label: "To pay (0)" },
     { key: "to_ship", label: "To ship (0)" },
     { key: "shipped", label: "Shipped (0)" },
     { key: "processed", label: "Processed (0)" },
-  ]
+  ];
 
   // Wait until Clerk finishes loading
-  if (!isLoaded) return null
+  if (!isLoaded) return null;
 
   // If user is not signed in, show NoAccess message
-  if (!isSignedIn) return <NoAccessToTrackDelivery />
+  if (!isSignedIn) return <NoAccessToTrackDelivery />;
 
   // For now, assume no orders
-  const orders: any[] = []
+  const orders: Order[] = [];
 
   return (
     <Container>
@@ -69,18 +73,23 @@ export default function TrackDeliveryPage() {
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
               No products to track yet
             </h2>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p className="text-gray-600 dark:text-gray-400 mb-4">
               You haven’t added any orders to track. Start shopping to see your orders here.
             </p>
+
             <Link
-            href="/"
-            className="p-2.5 block bg-black/5 dark:bg-white/10 border border-black/20 dark:border-white/20 text-center py-2.5 rounded-full text-sm font-semibold tracking-wide hover:border-black hover:bg-black hover:text-white dark:hover:border-white dark:hover:bg-white dark:hover:text-black transition-colors"
-          >
-            Discover Products
-          </Link>
+              href="/"
+              className="p-2.5 block bg-black/5 dark:bg-white/10 border 
+            border-black/20 dark:border-white/20 text-center rounded-full 
+            text-sm font-semibold tracking-wide hover:border-black hover:bg-black 
+            hover:text-white dark:hover:border-white dark:hover:bg-white 
+            dark:hover:text-black transition-colors"
+            >
+              Discover Products
+            </Link>
           </div>
         )}
       </div>
     </Container>
-  )
+  );
 }

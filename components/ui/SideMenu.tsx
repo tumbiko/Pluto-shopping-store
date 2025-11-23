@@ -6,7 +6,6 @@ import { headerData } from '@/constants/data';
 import { usePathname } from 'next/navigation';
 import SocialMedia from './SocialMedia';
 import { useOutsideClick } from '@/hooks';
-import { cn } from '@/lib/utils';
 
 interface SideBarProps {
   isOpen: boolean;
