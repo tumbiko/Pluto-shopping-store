@@ -159,7 +159,7 @@ const CartPage: React.FC = () => {
     }
   };
 
- // Checkout using PayChangu mobile-money initialize endpoint via server route
+  // Checkout using PayChangu mobile-money initialize endpoint via server route
 const handleCheckout = async () => {
   if (!selectedAddress) {
     toast.error("Please select an address first.");
@@ -183,12 +183,6 @@ const handleCheckout = async () => {
   try {
     const mobile = selectedAddress.phone;
     const amount = Number(getTotalPrice());
-    if (Number.isNaN(amount)) {
-      toast.error("Invalid order total");
-      setLoading(false);
-      return;
-    }
-
     const chargeId = `order-${Date.now()}`;
 
     const payload = {
@@ -208,46 +202,83 @@ const handleCheckout = async () => {
     });
 
     const data = await res.json();
+    console.log("📤 Mobile Money charge response:", data);
 
     if (!res.ok || data.status !== "success") {
-      toast.error(data?.message || "Payment failed to start.");
-      setLoading(false);
+      window.location.href = "/payment/failed";
       return;
     }
 
-    toast.success("Payment request sent. Please approve on your phone...");
+    toast.success("Payment request sent. Please approve the charge on your phone.");
 
-    // ---- POLLING TO VERIFY PAYMENT ----
-    const pollInterval = 3000; // 3 seconds
-    const maxAttempts = 20; // ~1 minute max
-    let attempts = 0;
+    // ⭐ Wait for payment verification
+   const verificationStatus = await waitForPaymentVerification(data.charge_id);
 
-    const intervalId = setInterval(async () => {
-      attempts++;
-      try {
-        const verifyRes = await fetch(`/api/paychangu/verify?tx_ref=${data.reference}`);
-        const verifyData = await verifyRes.json();
-
-        if (verifyData.status === "success" || verifyData.payment_status === "successful") {
-          clearInterval(intervalId);
-          resetCart();
-          window.location.href = `/success?tx_ref=${data.reference}&orderNumber=${chargeId}&transaction_id=${verifyData.transaction_id}`;
-        } else if (attempts >= maxAttempts) {
-          clearInterval(intervalId);
-          window.location.href = `/payment/failed?orderNumber=${chargeId}`;
-        }
-      } catch (err) {
-        console.error("Error verifying payment:", err);
-        clearInterval(intervalId);
-        window.location.href = `/payment/failed?orderNumber=${chargeId}`;
-      }
-    }, pollInterval);
-
-  } catch (err) {
-    console.error("Checkout error:", err);
-    toast.error("An error occurred while initiating payment.");
+if (verificationStatus === "success") {
+  window.location.href = `/success?ref=${data.charge_id}`;
+} else if (verificationStatus === "failed") {
+  window.location.href = `/payment/failed`;
+} else {
+  toast("Payment is still pending. Please check your mobile device.");
+}
+  } catch (error) {
+    console.error("❌ PayChangu API error:", error);
+    window.location.href = "/payment/failed";
   } finally {
     setLoading(false);
+  }
+};
+
+const waitForPaymentVerification = async (chargeId: string, maxAttempts = 20) => {
+  let attempts = 0;
+
+  // Small initial delay so backend can process the payment
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+
+  while (attempts < maxAttempts) {
+    attempts++;
+
+    try {
+      const res = await fetch(`/api/paychangu/verify?charge_id=${chargeId}`);
+      const data = await res.json();
+      console.log("📡 Payment verification status:", data);
+
+      if (data.status === "success") {
+        return "success";
+      } else if (data.status === "failed") {
+        return "failed";
+      } 
+      // pending → wait 3 seconds and retry
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    } catch (err) {
+      console.error("Error verifying payment:", err);
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+    }
+  }
+
+  // max attempts reached → consider still pending
+  return "pending";
+};
+
+
+
+const pollPaymentStatus = async (chargeId: string) => {
+  try {
+    const res = await fetch(`/api/paychangu/verify?charge_id=${chargeId}`);
+    const data = await res.json();
+    console.log("📡 Payment status polling:", data);
+
+    if (data.status === "success") {
+      window.location.href = `/success?ref=${chargeId}`;
+    } else if (data.status === "failed") {
+      window.location.href = `/payment/failed`;
+    } else {
+      // pending → retry after 3 seconds
+      setTimeout(() => pollPaymentStatus(chargeId), 3000);
+    }
+  } catch (err) {
+    console.error("Error polling payment status:", err);
+    setTimeout(() => pollPaymentStatus(chargeId), 5000);
   }
 };
 

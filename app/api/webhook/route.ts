@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     // 1. Read raw body
     const body = await req.json();
@@ -21,15 +21,21 @@ export async function POST(req: Request) {
 
     console.log("🔔 PayChangu Webhook Received:", body);
 
+    // Extract charge_id from order data
+    const chargeId = body.order?.charge_id || body.charge_id;
+    const status = body.order?.status || body.status;
+
     // Early exit for unsupported events
-    if (!body?.status) {
-      console.error("❌ Webhook missing status field");
+    if (!chargeId || !status) {
+      console.error("❌ Webhook missing charge_id or status field");
       return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
     }
 
     // 3. On a successful payment
-    if (body.status === "success") {
+    if (status === "success" || status === "successful") {
       console.log("💰 Payment marked SUCCESS — Updating Sanity…");
+
+      const paymentData = body.order || body;
 
       const sanityRes = await fetch(
         `https://${process.env.NEXT_PUBLIC_SANITY_PROJECT_ID}.api.sanity.io/v2023-08-01/data/mutate/production`,
@@ -43,12 +49,21 @@ export async function POST(req: Request) {
             mutations: [
               {
                 patch: {
-                  // Make sure this matches your Sanity order document _id
-                  id: body.charge_id,
+                  // Use charge_id as the order document _id
+                  id: chargeId,
                   set: {
                     status: "paid",
-                    transactionId: body.trans_id,
-                    completedAt: new Date().toISOString(),
+                    paychangu: {
+                      chargeId: paymentData.charge_id,
+                      refId: paymentData.ref_id,
+                      amount: paymentData.amount,
+                      mobile: paymentData.mobile,
+                      mobileMoneyProvider: paymentData.mobile_money?.name,
+                      transactionCharges: paymentData.transaction_charges,
+                      status: "verified",
+                      verified: true,
+                      completedAt: paymentData.completed_at || new Date().toISOString(),
+                    },
                   },
                 },
               },

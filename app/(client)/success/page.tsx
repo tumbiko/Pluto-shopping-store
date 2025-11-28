@@ -1,114 +1,175 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { motion } from "motion/react";
-import { Check, X, Home, Package, ShoppingBag } from "lucide-react";
-import Link from "next/link";
 import useStore from "@/store";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { motion } from "motion/react";
+import { Check, Home, Package, ShoppingBag } from "lucide-react";
+import Link from "next/link";
+import { Loader2 } from "lucide-react";
 
-const SuccessPage = () => {
+// ---- Proper types for PayChangu Verify Response ----
+
+type MobileMoneyInfo = {
+  name?: string;
+};
+
+export type PayChanguTransaction = {
+  charge_id?: string;
+  ref_id?: string;
+  amount?: string | number;
+  mobile?: string;
+  mobile_money?: MobileMoneyInfo;
+};
+
+type VerifyResponse = {
+  ok: boolean;
+  data?: PayChanguTransaction | null;
+};
+
+const SuccessPageContent = () => {
   const { resetCart } = useStore();
-  const [verified, setVerified] = useState(false);
-  const [verifying, setVerifying] = useState(true);
+  const searchParams = useSearchParams();
+  const chargeId = searchParams.get("ref");
 
-  const [orderNumber, setOrderNumber] = useState<string | null>(null);
-  const [txRef, setTxRef] = useState<string | null>(null);
-  const [transactionId, setTransactionId] = useState<string | null>(null);
+  const [transactionData, setTransactionData] =
+    useState<PayChanguTransaction | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Get search params on client
+  // Reset cart if payment is successful
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const order = params.get("orderNumber");
-    const tx_ref = params.get("tx_ref");
-    const tId = params.get("transaction_id");
+    if (chargeId) resetCart();
+  }, [chargeId, resetCart]);
 
-    setOrderNumber(order);
-    setTxRef(tx_ref);
-    setTransactionId(tId);
+  // Fetch transaction data
+  useEffect(() => {
+    const fetchTransaction = async () => {
+      if (!chargeId) return;
 
-    if (order) resetCart();
+      try {
+        const res = await fetch(`/api/paychangu/verify?charge_id=${chargeId}`);
+        const data: VerifyResponse = await res.json();
+        console.log("📤 PayChangu transaction data:", data);
 
-    if (tx_ref || order) {
-      const verifyPayment = async () => {
-        try {
-          const res = await fetch(`/api/paychangu/verify?tx_ref=${tx_ref || order}`);
-          const data = await res.json();
-          if (data.status === "success" || data.payment_status === "successful") {
-            setVerified(true);
-          }
-        } catch (err) {
-          console.error("Verification failed:", err);
-        } finally {
-          setVerifying(false);
-        }
-      };
-      verifyPayment();
-    } else {
-      setVerifying(false);
-    }
-  }, [resetCart]);
+        setTransactionData(data.data ?? null);
+      } catch (err) {
+        console.error("Error fetching transaction data:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const isSuccess = verified;
+    fetchTransaction();
+  }, [chargeId]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-900">
+        <Loader2 className="w-16 h-16 text-white animate-spin" />
+      </div>
+    );
+  }
 
   return (
-    <div className="py-5 bg-linear-to-br from-gray-50 to-gray-100 flex items-center justify-center mx-4">
+    <div className="py-5 bg-gray-900 flex items-center justify-center mx-4 min-h-screen">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="bg-white rounded-2xl flex flex-col gap-8 shadow-2xl p-6 max-w-xl w-full text-center"
+        className="bg-gray-800 rounded-2xl flex flex-col gap-8 shadow-2xl p-6 max-w-xl w-full text-center"
       >
-        {verifying ? (
-          <p className="text-gray-700">Verifying payment...</p>
-        ) : (
-          <>
-            <div
-              className={`w-20 h-20 ${
-                isSuccess ? "bg-black" : "bg-red-600"
-              } rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg`}
-            >
-              {isSuccess ? <Check className="text-white w-10 h-10" /> : <X className="text-white w-10 h-10" />}
-            </div>
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+          className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg"
+        >
+          <Check className="text-white w-10 h-10" />
+        </motion.div>
 
-            <h1 className="text-3xl font-bold text-gray-900 mb-4">
-              {isSuccess ? "Payment Successful!" : "Payment Failed"}
-            </h1>
+        <h1 className="text-3xl font-bold text-white mb-4">
+          Payment Successful!
+        </h1>
 
-            <div className="space-y-4 mb-4 text-left">
-              <p className="text-gray-700">
-                {isSuccess
-                  ? "Thank you for your purchase. We're processing your order and will ship it soon."
-                  : "Something went wrong. If payment was deducted, please contact support."}
-              </p>
-              <p className="text-gray-700">
-                Order Number: <span className="text-black font-semibold">{orderNumber || txRef}</span>
-              </p>
-              {transactionId && (
-                <p className="text-gray-700">
-                  Transaction ID: <span className="text-black font-semibold">{transactionId}</span>
-                </p>
-              )}
-            </div>
+        {/* Details */}
+        <div className="space-y-4 mb-4 text-left text-gray-300">
+          <p>
+            Thank you for your purchase. We&apos;re processing your order and
+            will ship it soon.
+          </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Link href="/" className="flex items-center justify-center px-4 py-3 font-semibold bg-black text-white rounded-lg">
-                <Home className="w-5 h-5 mr-2" />
-                Home
-              </Link>
-              <Link href="/orders" className="flex items-center justify-center px-4 py-3 font-semibold bg-lightGreen text-black border border-lightGreen rounded-lg">
-                <Package className="w-5 h-5 mr-2" />
-                Orders
-              </Link>
-              <Link href="/" className="flex items-center justify-center px-4 py-3 font-semibold bg-black text-white rounded-lg">
-                <ShoppingBag className="w-5 h-5 mr-2" />
-                Shop
-              </Link>
-            </div>
-          </>
-        )}
+          <p>
+            Order Number:{" "}
+            <span className="text-white font-semibold">
+              {transactionData?.charge_id ?? "N/A"}
+            </span>
+          </p>
+
+          <p>
+            Transaction ID:{" "}
+            <span className="text-white font-semibold">
+              {transactionData?.ref_id ?? "N/A"}
+            </span>
+          </p>
+
+          <p>
+            Amount:{" "}
+            <span className="text-white font-semibold">
+              {transactionData?.amount ?? "N/A"}
+            </span>
+          </p>
+
+          <p>
+            Phone:{" "}
+            <span className="text-white font-semibold">
+              {transactionData?.mobile ?? "N/A"}
+            </span>
+          </p>
+
+          <p>
+            Operator:{" "}
+            <span className="text-white font-semibold">
+              {transactionData?.mobile_money?.name ?? "N/A"}
+            </span>
+          </p>
+        </div>
+
+        {/* Buttons */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <Link
+            href="/"
+            className="flex items-center justify-center px-4 py-3 font-semibold bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-all duration-300 shadow-md"
+          >
+            <Home className="w-5 h-5 mr-2" /> Home
+          </Link>
+
+          <Link
+            href="/orders"
+            className="flex items-center justify-center px-4 py-3 font-semibold bg-green-600 text-white rounded-lg hover:bg-green-500 transition-all duration-300 shadow-md"
+          >
+            <Package className="w-5 h-5 mr-2" /> Orders
+          </Link>
+
+          <Link
+            href="/"
+            className="flex items-center justify-center px-4 py-3 font-semibold bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-all duration-300 shadow-md"
+          >
+            <ShoppingBag className="w-5 h-5 mr-2" /> Shop
+          </Link>
+        </div>
       </motion.div>
     </div>
   );
 };
+
+const SuccessPage = () => (
+  <Suspense
+    fallback={
+      <div className="text-white text-center mt-10">Loading...</div>
+    }
+  >
+    <SuccessPageContent />
+  </Suspense>
+);
 
 export default SuccessPage;

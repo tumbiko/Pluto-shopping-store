@@ -10,6 +10,7 @@ export interface Metadata {
   customerEmail: string;
   clerkUserId?: string;
   address?: Address | null;
+  charge_id?: string;
 }
 
 export interface GroupedCartItems {

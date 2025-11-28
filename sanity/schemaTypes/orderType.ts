@@ -14,7 +14,7 @@ export const orderType = defineType({
       validation: (Rule) => Rule.required(),
     }),
 
-    // Keep invoice if you still use invoicing; optional
+    // Optional invoice
     defineField({
       name: "invoice",
       title: "Invoice (optional)",
@@ -26,7 +26,7 @@ export const orderType = defineType({
       ],
     }),
 
-    // PayChangu payment data grouped under `paychangu`
+    // PayChangu payment data
     defineField({
       name: "paychangu",
       title: "PayChangu Data",
@@ -35,15 +35,17 @@ export const orderType = defineType({
         defineField({
           name: "transactionId",
           title: "Transaction ID",
-          description: "PayChangu transaction id / payment id (if present)",
+          description: "PayChangu internal transaction identifier (may be null)",
           type: "string",
         }),
+
         defineField({
-          name: "tx_ref",
-          title: "Reference (tx_ref)",
-          description: "Reference you sent (orderNumber / tx_ref)",
+          name: "charge_id",
+          title: "Charge ID",
+          description: "The ID returned by PayChangu verify API (use as the main order number)",
           type: "string",
         }),
+
         defineField({
           name: "status",
           title: "Payment Status",
@@ -58,37 +60,45 @@ export const orderType = defineType({
             ],
           },
         }),
+
         defineField({
           name: "payment_url",
           title: "Hosted Payment URL",
           type: "url",
         }),
+
         defineField({
           name: "amount",
           title: "Amount (as sent to PayChangu)",
           type: "number",
         }),
+
         defineField({
           name: "currency",
           title: "Currency",
           type: "string",
         }),
+
         defineField({
           name: "verified",
           title: "Webhook Verified",
-          description: "Set true after webhook signature + verify endpoint confirms payment",
+          description:
+            "Set true after webhook signature + verify endpoint confirms payment",
           type: "boolean",
           initialValue: false,
         }),
+
         defineField({
           name: "paidAt",
           title: "Paid At",
           type: "datetime",
         }),
+
         defineField({
           name: "rawResponse",
           title: "Raw PayChangu Response",
-          description: "Store the full API response when creating the payment (useful for debugging / reconciliation).",
+          description:
+            "Full API response for auditing / debugging",
           type: "object",
           options: { collapsible: true, collapsed: true },
           fields: [
@@ -99,9 +109,7 @@ export const orderType = defineType({
       options: { collapsible: true, collapsed: false },
     }),
 
- 
-
-
+    // --- Customer and order fields remain unchanged ---
     defineField({
       name: "clerkUserId",
       title: "Store User ID",
@@ -115,7 +123,7 @@ export const orderType = defineType({
       type: "string",
       validation: (Rule) => Rule.required(),
     }),
-    
+
     defineField({
       name: "email",
       title: "Customer Email",
@@ -154,7 +162,8 @@ export const orderType = defineType({
             prepare(select) {
               const title = select.productTitle || "Product";
               const qty = select.quantity || 0;
-              const price = typeof select.price === "number" ? select.price : 0;
+              const price =
+                typeof select.price === "number" ? select.price : 0;
               return {
                 title: `${title} x ${qty}`,
                 subtitle: `${price * qty} ${select.currency || ""}`,
@@ -238,10 +247,13 @@ export const orderType = defineType({
     prepare(select) {
       const id = select.orderId || "";
       const shortId = id ? `${id.slice(0, 5)}...${id.slice(-5)}` : "(no id)";
-      const amount = typeof select.amount === "number" ? select.amount : 0;
+      const amount =
+        typeof select.amount === "number" ? select.amount : 0;
+
       const subtitleParts = [`${amount} ${select.currency || ""}`];
       if (select.email) subtitleParts.push(select.email);
       if (select.status) subtitleParts.push(select.status);
+
       return {
         title: `${select.name || "Customer"} (${shortId})`,
         subtitle: subtitleParts.join(" • "),
