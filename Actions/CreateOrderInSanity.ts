@@ -18,8 +18,8 @@ export async function createOrderInSanity(items: GroupedCartItems[], metadata: M
   const doc: any = {
     _type: 'order',
 
-    // 🔥 Use charge_id as the REAL order number
-    orderNumber: metadata.charge_id,
+    // Use orderNumber from metadata (this is set before payment is initiated)
+    orderNumber: metadata.orderNumber,
 
     clerkUserId: metadata.clerkUserId || null,
     customerName: metadata.customerName || '',
@@ -56,11 +56,11 @@ export async function createOrderInSanity(items: GroupedCartItems[], metadata: M
     status: 'pending',
     orderDate: new Date().toISOString(),
 
-    // 🔥 Initialize PayChangu block using charge_id instead of tx_ref
+    // Initialize PayChangu block (charge_id will be set when webhook updates it)
     paychangu: {
       _type: 'object',
       transactionId: '',
-      charge_id: metadata.charge_id, // NEW FIELD
+      charge_id: metadata.charge_id || '', // Will be populated by webhook
       status: 'initialized',
       payment_url: '',
       amount: 0,

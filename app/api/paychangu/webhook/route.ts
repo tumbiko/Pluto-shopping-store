@@ -189,7 +189,14 @@ async function upsertOrderFromVerification(verifyData: unknown) {
   const rec = asRecord(verifyData);
   const data = asRecord(rec.data ?? rec);
 
-  // Prefer PayChangu 'id' or 'charge_id' (both used by some APIs). We will treat this as the orderNumber.
+  // Extract tx_ref (original orderNumber) to find the order in Sanity
+  const txRef =
+    (data["tx_ref"] as string | undefined) ??
+    (data["reference"] as string | undefined) ??
+    (rec["tx_ref"] as string | undefined) ??
+    (rec["reference"] as string | undefined);
+
+  // Extract charge_id (PayChangu's transaction ID)
   const chargeId =
     (data["id"] as string | undefined) ??
     (data["charge_id"] as string | undefined) ??
@@ -206,14 +213,15 @@ async function upsertOrderFromVerification(verifyData: unknown) {
       ? `${firstName ?? ""} ${lastName ?? ""}`.trim()
       : ((data["customerName"] ?? rec["customerName"]) as string | undefined);
 
-  if (!chargeId) {
-    console.error(`${LOG_PREFIX} [upsertOrderFromVerification] No charge_id / id found in verification payload`);
-    throw new Error("No charge_id / id found in verification payload");
+  if (!txRef || !chargeId) {
+    console.error(`${LOG_PREFIX} [upsertOrderFromVerification] Missing tx_ref or charge_id. txRef=${txRef}, chargeId=${chargeId}`);
+    throw new Error("Missing tx_ref or charge_id in verification payload");
   }
 
-  console.log(`${LOG_PREFIX} [upsertOrderFromVerification] Handling charge_id=${chargeId}`);
+  console.log(`${LOG_PREFIX} [upsertOrderFromVerification] Handling txRef=${txRef}, chargeId=${chargeId}`);
 
-  const existingOrder = await findOrderByNumber(chargeId);
+  // Look for existing order by orderNumber (which matches tx_ref)
+  const existingOrder = await findOrderByNumber(txRef);
 
   // Build paychangu object
   const rawBodyString = (() => {
