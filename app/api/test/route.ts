@@ -1,17 +1,17 @@
-import { writeClient } from "@/sanity/lib/writeclient";
-import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma"
+import { NextResponse } from "next/server"
 
 export async function GET() {
-  try {
-    const doc = await writeClient.create({
-      _type: "address",
-      firstName: "Test",
-      lastName: "TokenCheck",
-    });
-    
-    return NextResponse.json({ ok: true, doc });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ ok: false, error: message });
-  }
+  const order = await prisma.order.create({
+    data: {
+      orderNumber: `test-${Date.now()}`,
+      customerName: "Vitumbiko",
+      customerEmail: "test@example.com",
+      totalPrice: 1200,
+      status: "pending",
+      items: [],
+    },
+  })
+
+  return NextResponse.json(order)
 }

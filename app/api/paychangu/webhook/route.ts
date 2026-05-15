@@ -4,6 +4,9 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { backendClient } from "@/sanity/lib/backendClient";
 import { createOrderInSanity as createOrderInSanityImported } from "@/Actions/CreateOrderInSanity";
+import { createOrderInPostgres } from "@/Actions/createOrderInPostgres";
+import type { Metadata } from "@/Actions/createCheckOutSession";
+import type { Address } from "@/sanity.types";
 
 type OrderProductItem = {
   product?: { _ref?: string } | null;
@@ -55,6 +58,11 @@ type CreateOrderMeta = {
  * createOrderInSanityImported may or may not be typed in your codebase.
  * Create a small typed wrapper so the rest of this file can call it with typed inputs.
  */
+type PgItem = {
+  product: { _id: string; name: string; price: number };
+  quantity: number;
+};
+
 const createOrderInSanity = (createOrderInSanityImported as unknown) as (
   items: GroupedCartItem[],
   meta: CreateOrderMeta
@@ -136,6 +144,56 @@ async function updateStockLevelsFromOrder(order: OrderDoc | null) {
   }
 }
 
+async function syncToPostgres(verifyData: unknown, chargeId: string) {
+  try {
+    const { items, metadata } = extractItemsAndMetadataFromVerify(verifyData);
+    const rec = asRecord(verifyData);
+    const data = asRecord(rec.data ?? rec);
+    
+    const metaProducts = metadata?.products as Array<{ id: string, name: string, quantity: number, price: number }> | undefined;
+    
+    let pgItems: PgItem[] = [];
+    if (metaProducts && Array.isArray(metaProducts) && metaProducts.length > 0) {
+      pgItems = metaProducts.map(p => ({
+        product: {
+          _id: p.id,
+          name: p.name,
+          price: typeof p.price === 'number' ? p.price : Number(p.price || 0),
+        },
+        quantity: typeof p.quantity === 'number' ? p.quantity : Number(p.quantity || 1),
+      }));
+    } else if (items && items.length > 0) {
+      pgItems = items.map(it => ({
+        product: { _id: it.product, name: "Unknown Product", price: 0 },
+        quantity: it.quantity,
+      }));
+    }
+
+    const email = (data["email"] ?? rec["email"]) as string | undefined;
+    const firstName = (data["first_name"] ?? rec["first_name"]) as string | undefined;
+    const lastName = (data["last_name"] ?? rec["last_name"]) as string | undefined;
+    const customerName = (firstName || lastName)
+      ? `${firstName ?? ""} ${lastName ?? ""}`.trim()
+      : ((data["customerName"] ?? rec["customerName"]) as string | undefined);
+
+    const address = (metadata?.address as Address | undefined) || undefined;
+    const pgMeta: Metadata = {
+      orderNumber: chargeId,
+      customerName: customerName || (metadata?.customerName as string | undefined) || "",
+      customerEmail: email || (metadata?.customerEmail as string | undefined) || "",
+      clerkUserId: metadata?.clerkUserId as string | undefined,
+      address: address,
+      charge_id: chargeId,
+    };
+
+    console.log(`${LOG_PREFIX} [syncToPostgres] Syncing order ${chargeId} to Neon Postgres...`);
+    await createOrderInPostgres(pgItems, pgMeta, "successful");
+    console.log(`${LOG_PREFIX} [syncToPostgres] Postgres sync successful.`);
+  } catch (err) {
+    console.error(`${LOG_PREFIX} [syncToPostgres] Error syncing to Postgres:`, err);
+  }
+}
+
 /**
  * Normalize items found in verification payload/metadata
  *
@@ -189,14 +247,7 @@ async function upsertOrderFromVerification(verifyData: unknown) {
   const rec = asRecord(verifyData);
   const data = asRecord(rec.data ?? rec);
 
-  // Extract tx_ref (original orderNumber) to find the order in Sanity
-  const txRef =
-    (data["tx_ref"] as string | undefined) ??
-    (data["reference"] as string | undefined) ??
-    (rec["tx_ref"] as string | undefined) ??
-    (rec["reference"] as string | undefined);
-
-  // Extract charge_id (PayChangu's transaction ID)
+  // Prefer PayChangu 'id' or 'charge_id' (both used by some APIs). We will treat this as the orderNumber.
   const chargeId =
     (data["id"] as string | undefined) ??
     (data["charge_id"] as string | undefined) ??
@@ -213,15 +264,14 @@ async function upsertOrderFromVerification(verifyData: unknown) {
       ? `${firstName ?? ""} ${lastName ?? ""}`.trim()
       : ((data["customerName"] ?? rec["customerName"]) as string | undefined);
 
-  if (!txRef || !chargeId) {
-    console.error(`${LOG_PREFIX} [upsertOrderFromVerification] Missing tx_ref or charge_id. txRef=${txRef}, chargeId=${chargeId}`);
-    throw new Error("Missing tx_ref or charge_id in verification payload");
+  if (!chargeId) {
+    console.error(`${LOG_PREFIX} [upsertOrderFromVerification] No charge_id / id found in verification payload`);
+    throw new Error("No charge_id / id found in verification payload");
   }
 
-  console.log(`${LOG_PREFIX} [upsertOrderFromVerification] Handling txRef=${txRef}, chargeId=${chargeId}`);
+  console.log(`${LOG_PREFIX} [upsertOrderFromVerification] Handling charge_id=${chargeId}`);
 
-  // Look for existing order by orderNumber (which matches tx_ref)
-  const existingOrder = await findOrderByNumber(txRef);
+  const existingOrder = await findOrderByNumber(chargeId);
 
   // Build paychangu object
   const rawBodyString = (() => {
@@ -280,6 +330,7 @@ async function upsertOrderFromVerification(verifyData: unknown) {
       );
     }
 
+    await syncToPostgres(verifyData, chargeId);
     return { updated: true, orderId: existingOrder._id };
   } else {
     console.log(`${LOG_PREFIX} [upsertOrderFromVerification] No existing order for ${chargeId}. Creating new order.`);
@@ -342,6 +393,7 @@ async function upsertOrderFromVerification(verifyData: unknown) {
           console.error(`${LOG_PREFIX} [upsertOrderFromVerification] Error patching paychangu on created order:`, err);
         }
 
+        await syncToPostgres(verifyData, chargeId);
         return { created: true, orderId: createdId ?? null };
       } else {
         // fallback: minimal order
@@ -361,6 +413,7 @@ async function upsertOrderFromVerification(verifyData: unknown) {
         console.log(`${LOG_PREFIX} [upsertOrderFromVerification] Creating minimal order (no items).`);
         const created = await backendClient.create(newOrder);
         console.log(`${LOG_PREFIX} [upsertOrderFromVerification] Created minimal order:`, (created as { _id?: string })._id);
+        await syncToPostgres(verifyData, chargeId);
         return { created: true, orderId: (created as { _id?: string })._id ?? null };
       }
     } catch (err) {

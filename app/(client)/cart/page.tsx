@@ -262,27 +262,6 @@ const waitForPaymentVerification = async (chargeId: string, maxAttempts = 20) =>
 
 
 
-const pollPaymentStatus = async (chargeId: string) => {
-  try {
-    const res = await fetch(`/api/paychangu/verify?charge_id=${chargeId}`);
-    const data = await res.json();
-    console.log("📡 Payment status polling:", data);
-
-    if (data.status === "success") {
-      window.location.href = `/success?ref=${chargeId}`;
-    } else if (data.status === "failed") {
-      window.location.href = `/payment/failed`;
-    } else {
-      // pending → retry after 3 seconds
-      setTimeout(() => pollPaymentStatus(chargeId), 3000);
-    }
-  } catch (err) {
-    console.error("Error polling payment status:", err);
-    setTimeout(() => pollPaymentStatus(chargeId), 5000);
-  }
-};
-
-
 
   // Render
   return (

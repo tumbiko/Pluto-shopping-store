@@ -75,28 +75,25 @@ const SearchBar = () => {
         setLoading(false);
         return;
       }
-      performLocalSearch(q);
+
+      setLoading(true);
+      try {
+        if (!fuse) {
+          setResults([]);
+          setLoading(false);
+          return;
+        }
+        const fuseRes = fuse.search(q, { limit: 10 });
+        setResults(fuseRes.map((r) => r.item));
+      } catch (err) {
+        console.error("Fuse search error:", err);
+        setResults([]);
+      } finally {
+        setLoading(false);
+      }
     }, 400);
     return () => clearTimeout(delay);
-  }, [query]);
-
-  const performLocalSearch = (searchText: string) => {
-    setLoading(true);
-    try {
-      if (!fuse) {
-        setResults([]);
-        setLoading(false);
-        return;
-      }
-      const fuseRes = fuse.search(searchText, { limit: 10 });
-      setResults(fuseRes.map((r) => r.item));
-    } catch (err) {
-      console.error("Fuse search error:", err);
-      setResults([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [query, fuse]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {

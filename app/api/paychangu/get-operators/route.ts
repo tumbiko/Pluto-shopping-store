@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   const secretKey = process.env.PAYCHANGU_SECRET_KEY;
   if (!secretKey)
     return NextResponse.json({ status: "failed", message: "Missing API key" }, { status: 500 });
