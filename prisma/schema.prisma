@@ -1,0 +1,54 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// prisma/schema.prisma
+datasource db {
+  provider  = "postgresql"
+  url  	    = env("DATABASE_URL")
+  // uncomment next line if you use Prisma <5.10
+  // directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+// ─── Order ───────────────────────────────────────────────────────────────────
+
+model Order {
+  id          String  @id @default(cuid())
+  orderNumber String  @unique // charge_id / tx_ref from PayChangu
+  clerkUserId String?
+  status      String  @default("pending") // pending | paid | failed | refunded
+
+  // Customer
+  customerName  String
+  customerEmail String
+
+  // Totals
+  totalPrice     Float
+  currency       String @default("MWK")
+  amountDiscount Float  @default(0)
+
+  // Shipping address (flattened for simplicity)
+  addressName     String?
+  addressLine     String?
+  addressCity     String?
+  addressState    String?
+  addressZip      String?
+  addressPhone    String?
+  addressOperator String?
+
+  // PayChangu payment details
+  payChanguChargeId      String?
+  payChanguTransactionId String?
+  payChanguStatus        String?
+  payChanguAmount        Float?
+  payChanguVerified      Boolean @default(false)
+
+  // Line items stored as JSON (array of { productId, name, quantity, price })
+  items Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

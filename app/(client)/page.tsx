@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/button";
 import Container from "@/components/ui/container";
 import HomeBanner from "@/components/ui/HomeBanner";
 import HomeCategories from "@/components/ui/HomeCategories";
@@ -15,8 +14,9 @@ const home = async () => {
       <HomeBanner/>
       <div className="py-10">
         <ProductGrid/>
+        <HomeCategories categories={categories}/>
       </div>
-      <HomeCategories categories={categories}/>
+      
       <LatestBlog/>
     </Container>
   );

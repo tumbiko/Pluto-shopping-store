@@ -1,9 +1,9 @@
 import { cn } from '@/lib/utils';
-import React, { Children } from 'react';
+import React from 'react';
 
 const container = ({children, className}: {children: React.ReactNode; className?: string;}) => {
   return (
-    <div className={cn("max-w-full mx-auto px-4 sm:px-6 lg:px-8", className)}>
+    <div className={cn("max-w-full mx-auto px-4 sm:px-2 lg:px-8", className)}>
       {children}
     </div>
   )

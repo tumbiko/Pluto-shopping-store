@@ -1,7 +1,7 @@
+// app/not-found.tsx
+import React from "react";
 import Logo from "@/components/ui/Logo";
 import Link from "next/link";
-import React from "react";
-import './globals.css';
 
 const NotFoundPage = () => {
   return (
@@ -37,17 +37,11 @@ const NotFoundPage = () => {
         <div className="mt-8 text-center">
           <p className="text-sm text-gray-600">
             Need help? Visit the{" "}
-            <Link
-              href="/help"
-              className="font-medium text-amazon-blue hover:text-amazon-blue-dark"
-            >
+            <Link href="/help" className="font-medium text-amazon-blue hover:text-amazon-blue-dark">
               Help section
             </Link>{" "}
             or{" "}
-            <Link
-              href="/contact"
-              className="font-medium text-amazon-blue hover:text-amazon-blue-dark"
-            >
+            <Link href="/contact" className="font-medium text-amazon-blue hover:text-amazon-blue-dark">
               contact us
             </Link>
           </p>

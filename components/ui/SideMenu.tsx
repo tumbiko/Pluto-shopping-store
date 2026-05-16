@@ -1,50 +1,103 @@
-import React, { FC, use } from 'react'
+import React, { FC, useState, useEffect } from 'react';
 import Logo from './Logo';
-import { X } from 'lucide-react';
-import Link from 'next/link'
+import { X, Sun, Moon } from 'lucide-react';
+import Link from 'next/link';
 import { headerData } from '@/constants/data';
 import { usePathname } from 'next/navigation';
 import SocialMedia from './SocialMedia';
-import { on } from 'events';
-import { useEffect, useRef } from 'react';
 import { useOutsideClick } from '@/hooks';
 
-interface SideBarProps{
-    isOpen: boolean;
-    onClose: () => void;
+interface SideBarProps {
+  isOpen: boolean;
+  onClose: () => void;
 }
 
-const SideMenu:FC<SideBarProps> = ({isOpen,onClose}) => {
-    const pathname = usePathname();
-    const sidebarRef = useOutsideClick<HTMLDivElement>(onClose); 
+const SideMenu: FC<SideBarProps> = ({ isOpen, onClose }) => {
+  const pathname = usePathname();
+  const sidebarRef = useOutsideClick<HTMLDivElement>(onClose);
+
+  const [isDark, setIsDark] = useState(false);
+
+  // Optional: persist theme in localStorage
+  useEffect(() => {
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+      setIsDark(true);
+    } else {
+      document.documentElement.classList.remove('dark');
+      setIsDark(false);
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    if (isDark) {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+      setIsDark(false);
+    } else {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+      setIsDark(true);
+    }
+  };
+
   return (
-    <div className={`fixed inset-y-0 text-white/80 h-screen left-0 z-50 w-full bg-black/50 shadow-xl
-    ${
-        isOpen ? "translate-x-0":"-translate-x-full"
-    } hoverEffect`}>
-      <div ref={sidebarRef} className=' min-w-72 max-w-96 bg-black h-screen p-10 border-r-shop-yellow flex flex-col gap-6'>
+    <div
+      className={`fixed inset-0 z-50 text-white transition-transform duration-300 ${
+        isOpen ? 'translate-x-0' : '-translate-x-full'
+      }`}
+    >
+      <div
+        ref={sidebarRef}
+        className='h-screen w-[77%] max-w-4xl bg-black p-10 flex flex-col gap-6 relative'
+      >
+        {/* Header */}
         <div className='flex items-center justify-between gap-5'>
-            <Logo className='text-white hover:text-shop-dark-yellow'/>
-            <button onClick={onClose} className='hover:text-shop-dark-yellow hoverEffect'>
-                <X/>
-
-            </button>
+          <Logo className='text-white hover:text-yellow-400' />
+          <button onClick={onClose} className='hover:text-yellow-400'>
+            <X />
+          </button>
         </div>
+
+        {/* Navigation Links */}
         <div className='flex flex-col gap-6 text-lg font-semibold tracking-wide mt-10'>
-            {headerData?.map((item)=>(
-                <Link href={item?.href} key={item?.name} className={`hover:text-shop-dark-yellow hoverEffect ${
-                    pathname === item?.href && "text-shop-dark-yellow"
-                }`}>
-                {item?.name}
-                </Link>
-
-            ))}
+          {headerData?.map((item) => (
+            <Link
+              href={item?.href}
+              key={item?.name}
+              onClick={onClose}
+              className={`hover:text-yellow-400 ${
+                pathname === item?.href ? 'text-yellow-400' : ''
+              }`}
+            >
+              {item?.name}
+            </Link>
+          ))}
+           {/* Track Delivery Link */}
+  <Link
+    href="/trackdelivery"
+    onClick={onClose}
+    className={`hover:text-yellow-400 ${
+      pathname === '/track-delivery' ? 'text-yellow-400' : ''
+    }`}
+  >
+    Track Delivery
+  </Link>
         </div>
-        <SocialMedia/>
+
+        {/* Social Media */}
+        <SocialMedia />
+
+        {/* Dark Mode Toggle */}
+        <button
+          onClick={toggleTheme}
+          className='absolute bottom-10 right-10 p-2 text-black rounded-full bg-gray-800 hover:bg-gray-700 flex items-center justify-center'
+        >
+          {isDark ? <Sun className='w-5 h-5 text-yellow-400' /> : <Moon className='w-5 h-5' />}
+        </button>
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default SideMenu
-
+export default SideMenu;

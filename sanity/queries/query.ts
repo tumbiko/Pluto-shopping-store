@@ -13,13 +13,21 @@ const LATEST_BLOG_QUERY = defineQuery(
 
 const DEAL_PRODUCTS = defineQuery(
   `*[_type == 'product' && status == 'hot'] | order(name asc){
-    ...,"categories": categories[]->title
+    ...,
+    specifications,   // <--- add this
+    "categories": categories[]->title
   }`
 );
 
 const PRODUCT_BY_SLUG_QUERY = defineQuery(
-  `*[_type == "product" && slug.current == $slug] | order(name asc) [0]`
+  `*[_type == "product" && slug.current == $slug] | order(name asc) [0]{
+    ...,
+    specifications,   // <--- add this
+    "categories": categories[]->title,
+    "brandName": brand->title
+  }`
 );
+
 
 const BRAND_QUERY = defineQuery(`*[_type == "product" && slug.current == $slug]{
   "brandName": brand->title

@@ -13,46 +13,124 @@ export const orderType = defineType({
       type: "string",
       validation: (Rule) => Rule.required(),
     }),
-    {
+
+    // Optional invoice
+    defineField({
       name: "invoice",
+      title: "Invoice (optional)",
       type: "object",
       fields: [
         { name: "id", type: "string" },
         { name: "number", type: "string" },
         { name: "hosted_invoice_url", type: "url" },
       ],
-    },
-    // Replaced Stripe fields with PayChangu
-    defineField({
-      name: "paychanguTransactionId",
-      title: "PayChangu Transaction ID",
-      type: "string",
-      validation: (Rule) => Rule.required(),
     }),
+
+    // PayChangu payment data
     defineField({
-      name: "paychanguReference",
-      title: "PayChangu Reference",
-      type: "string",
-      validation: (Rule) => Rule.required(),
+      name: "paychangu",
+      title: "PayChangu Data",
+      type: "object",
+      fields: [
+        defineField({
+          name: "transactionId",
+          title: "Transaction ID",
+          description: "PayChangu internal transaction identifier (may be null)",
+          type: "string",
+        }),
+
+        defineField({
+          name: "charge_id",
+          title: "Charge ID",
+          description: "The ID returned by PayChangu verify API (use as the main order number)",
+          type: "string",
+        }),
+
+        defineField({
+          name: "status",
+          title: "Payment Status",
+          type: "string",
+          options: {
+            list: [
+              { title: "Initialized", value: "initialized" },
+              { title: "Pending", value: "pending" },
+              { title: "Success", value: "success" },
+              { title: "Failed", value: "failed" },
+              { title: "Canceled", value: "canceled" },
+            ],
+          },
+        }),
+
+        defineField({
+          name: "payment_url",
+          title: "Hosted Payment URL",
+          type: "url",
+        }),
+
+        defineField({
+          name: "amount",
+          title: "Amount (as sent to PayChangu)",
+          type: "number",
+        }),
+
+        defineField({
+          name: "currency",
+          title: "Currency",
+          type: "string",
+        }),
+
+        defineField({
+          name: "verified",
+          title: "Webhook Verified",
+          description:
+            "Set true after webhook signature + verify endpoint confirms payment",
+          type: "boolean",
+          initialValue: false,
+        }),
+
+        defineField({
+          name: "paidAt",
+          title: "Paid At",
+          type: "datetime",
+        }),
+
+        defineField({
+          name: "rawResponse",
+          title: "Raw PayChangu Response",
+          description:
+            "Full API response for auditing / debugging",
+          type: "object",
+          options: { collapsible: true, collapsed: true },
+          fields: [
+            { name: "body", title: "Response body", type: "text" },
+          ],
+        }),
+      ],
+      options: { collapsible: true, collapsed: false },
     }),
+
+    // --- Customer and order fields remain unchanged ---
     defineField({
       name: "clerkUserId",
       title: "Store User ID",
       type: "string",
       validation: (Rule) => Rule.required(),
     }),
+
     defineField({
       name: "customerName",
       title: "Customer Name",
       type: "string",
       validation: (Rule) => Rule.required(),
     }),
+
     defineField({
       name: "email",
       title: "Customer Email",
       type: "string",
       validation: (Rule) => Rule.required().email(),
     }),
+
     defineField({
       name: "products",
       title: "Products",
@@ -75,16 +153,20 @@ export const orderType = defineType({
           ],
           preview: {
             select: {
-              product: "product.name",
+              productTitle: "product.name",
               quantity: "quantity",
-              image: "product.image",
+              image: "product.images.0",
               price: "product.price",
               currency: "product.currency",
             },
             prepare(select) {
+              const title = select.productTitle || "Product";
+              const qty = select.quantity || 0;
+              const price =
+                typeof select.price === "number" ? select.price : 0;
               return {
-                title: `${select.product} x ${select.quantity}`,
-                subtitle: `${select.price * select.quantity}`,
+                title: `${title} x ${qty}`,
+                subtitle: `${price * qty} ${select.currency || ""}`,
                 media: select.image,
               };
             },
@@ -92,24 +174,28 @@ export const orderType = defineType({
         }),
       ],
     }),
+
     defineField({
       name: "totalPrice",
       title: "Total Price",
       type: "number",
       validation: (Rule) => Rule.required().min(0),
     }),
+
     defineField({
       name: "currency",
       title: "Currency",
       type: "string",
       validation: (Rule) => Rule.required(),
     }),
+
     defineField({
       name: "amountDiscount",
       title: "Amount Discount",
       type: "number",
       validation: (Rule) => Rule.required(),
     }),
+
     defineField({
       name: "address",
       title: "Shipping Address",
@@ -122,6 +208,7 @@ export const orderType = defineType({
         defineField({ name: "name", title: "Name", type: "string" }),
       ],
     }),
+
     defineField({
       name: "status",
       title: "Order Status",
@@ -137,7 +224,9 @@ export const orderType = defineType({
           { title: "Cancelled", value: "cancelled" },
         ],
       },
+      initialValue: "pending",
     }),
+
     defineField({
       name: "orderDate",
       title: "Order Date",
@@ -145,6 +234,7 @@ export const orderType = defineType({
       validation: (Rule) => Rule.required(),
     }),
   ],
+
   preview: {
     select: {
       name: "customerName",
@@ -152,12 +242,21 @@ export const orderType = defineType({
       currency: "currency",
       orderId: "orderNumber",
       email: "email",
+      status: "status",
     },
     prepare(select) {
-      const orderIdSnippet = `${select.orderId.slice(0, 5)}...${select.orderId.slice(-5)}`;
+      const id = select.orderId || "";
+      const shortId = id ? `${id.slice(0, 5)}...${id.slice(-5)}` : "(no id)";
+      const amount =
+        typeof select.amount === "number" ? select.amount : 0;
+
+      const subtitleParts = [`${amount} ${select.currency || ""}`];
+      if (select.email) subtitleParts.push(select.email);
+      if (select.status) subtitleParts.push(select.status);
+
       return {
-        title: `${select.name} (${orderIdSnippet})`,
-        subtitle: `${select.amount} ${select.currency}, ${select.email}`,
+        title: `${select.name || "Customer"} (${shortId})`,
+        subtitle: subtitleParts.join(" • "),
         media: BasketIcon,
       };
     },

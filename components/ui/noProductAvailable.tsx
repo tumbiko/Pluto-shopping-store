@@ -15,7 +15,7 @@ const NoProductAvailable = ({
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center py-10 min-h-80 space-y-4 bg-gray-100 rounded-lg w-full mt-10 text-center",
+        "flex flex-col items-center justify-center py-10 min-h-80 space-y-4 rounded-lg w-full mt-10 text-center bg-gray-100 dark:bg-[#1a1a1a] transition-colors duration-300",
         className
       )}
     >
@@ -24,23 +24,27 @@ const NoProductAvailable = ({
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: "easeInOut" }}
       >
-        <h2 className="text-2xl font-bold text-gray-800">No Product Available</h2>
+        <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
+          No Product Available
+        </h2>
       </motion.div>
 
       <motion.p
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5, ease: "easeInOut", delay: 0.2 }}
-        className="text-gray-600"
+        className="text-gray-600 dark:text-gray-300"
       >
         We are sorry, but there are currently no products available in the{" "}
-        <span className="font-semibold text-shop-dark-yellow">{selectedTab}</span> category.
-        Please check back later or explore other categories for exciting products!
+        <span className="font-semibold text-shop-dark-yellow dark:text-shop-golden">
+          {selectedTab}
+        </span>{" "}
+        category. Please check back later or explore other categories for exciting products!
       </motion.p>
 
       {/* Zooming text — apply transform-gpu and font smoothing */}
       <motion.div
-        className="flex items-center space-x-2 text-gray-500 transform-gpu p-2"
+        className="flex items-center space-x-2 text-gray-500 dark:text-gray-400 transform-gpu p-2 transition-colors duration-300"
         animate={{}}
       >
         <Loader2 className="w-5 h-5 animate-spin" />
@@ -70,7 +74,7 @@ const NoProductAvailable = ({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5, ease: "easeInOut", delay: 0.2 }}
-        className="text-gray-600"
+        className="text-gray-600 dark:text-gray-300"
       >
         Please check back later or explore other product categories
       </motion.p>
