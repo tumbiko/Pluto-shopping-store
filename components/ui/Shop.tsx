@@ -49,10 +49,9 @@ const Shop = ({ categories, brands }: Props) => {
         ...,"categories": categories[]->title
       }
     `;
-      const data = await client.fetch(
+      const data = await client.withConfig({ useCdn: false }).fetch(
         query,
-        { selectedCategory, selectedBrand, minPrice, maxPrice },
-        { next: { revalidate: 0 } }
+        { selectedCategory, selectedBrand, minPrice, maxPrice }
       );
       setProducts(data || []);
     } catch (error) {
@@ -88,10 +87,9 @@ const Shop = ({ categories, brands }: Props) => {
           ...,"categories": categories[]->title
         }
       `;
-        const data = await client.fetch(
+        const data = await client.withConfig({ useCdn: false }).fetch(
           query,
-          { selectedCategory, selectedBrand, minPrice, maxPrice },
-          { next: { revalidate: 0 } }
+          { selectedCategory, selectedBrand, minPrice, maxPrice }
         );
         if (!mounted) return;
         setProducts(data || []);

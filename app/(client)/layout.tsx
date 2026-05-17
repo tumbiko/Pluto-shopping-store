@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import "../globals.css";
 import Footer from "@/components/Footer";
 import {ClerkProvider} from "@clerk/nextjs"
-
+import { SanityLive } from "@/sanity/lib/live";
 
 export const metadata: Metadata = {
   title: "Pluto shopping store",
@@ -20,6 +20,7 @@ export default function RootLayout({ children, }:Readonly<{ children: React.Reac
           </main>
           <Footer/>
         </div>
+        <SanityLive />
     </ClerkProvider>
   );
 }

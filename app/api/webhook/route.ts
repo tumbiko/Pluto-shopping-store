@@ -21,8 +21,10 @@ export async function POST(req: NextRequest) {
 
     console.log("🔔 PayChangu Webhook Received:", body);
 
-    const chargeId = body.order?.charge_id || body.charge_id;
-    const status = body.order?.status || body.status;
+    const paymentData = body.order || body;
+    const chargeId = paymentData.charge_id ? String(paymentData.charge_id) : null;
+    const txRef = paymentData.tx_ref || paymentData.ref_id || paymentData.txRef; 
+    const status = paymentData.status;
 
     if (!chargeId || !status) {
       console.error("❌ Webhook missing charge_id or status field");
@@ -30,32 +32,60 @@ export async function POST(req: NextRequest) {
     }
 
     if (status === "success" || status === "successful") {
-      console.log("💰 Payment marked SUCCESS — Updating Sanity and Postgres…");
-
-      const paymentData = body.order || body;
+      console.log(`💰 Payment marked SUCCESS — Looking for order (txRef: ${txRef}, chargeId: ${chargeId})`);
 
       try {
-        await prisma.order.update({
-          where: { orderNumber: chargeId },
-          data: {
-            status: "paid",
-            payChanguStatus: "verified",
-            payChanguChargeId: paymentData.charge_id,
-            payChanguTransactionId: paymentData.ref_id,
-            payChanguAmount: paymentData.amount,
-            payChanguVerified: true,
-          }
-        });
-        console.log("✅ Postgres order updated to paid");
+        let order = null;
+        
+        // 1. Try to find by tx_ref (which is our original orderNumber)
+        if (txRef) {
+          order = await prisma.order.findUnique({ where: { orderNumber: String(txRef) } });
+        }
+        
+        // 2. Fallback: try finding by payChanguChargeId (which we now save during init)
+        if (!order && chargeId) {
+          order = await prisma.order.findFirst({ where: { payChanguChargeId: chargeId } });
+        }
+        
+        // 3. Fallback: maybe orderNumber IS the chargeId
+        if (!order && chargeId) {
+          order = await prisma.order.findUnique({ where: { orderNumber: chargeId } });
+        }
+
+        if (order) {
+          await prisma.order.update({
+            where: { id: order.id },
+            data: {
+              status: "paid",
+              payChanguStatus: "verified",
+              payChanguChargeId: chargeId,
+              payChanguTransactionId: txRef || chargeId,
+              payChanguAmount: paymentData.amount,
+              payChanguVerified: true,
+            }
+          });
+          console.log(`✅ Postgres order ${order.orderNumber} updated to paid`);
+        } else {
+          console.error("❌ Postgres update error: Could not find matching order.");
+        }
       } catch (err) {
-        console.error("❌ Postgres update error:", err);
+        console.error(`❌ Postgres update error:`, err);
       }
 
       try {
-        const sanityOrder = await backendClient.fetch(
-          `*[_type == "order" && orderNumber == $chargeId][0]`,
-          { chargeId }
-        );
+        let sanityOrder = null;
+        
+        if (txRef) {
+          sanityOrder = await backendClient.fetch(`*[_type == "order" && orderNumber == $txRef][0]`, { txRef: String(txRef) });
+        }
+        
+        if (!sanityOrder && chargeId) {
+          sanityOrder = await backendClient.fetch(`*[_type == "order" && paychangu.chargeId == $chargeId][0]`, { chargeId });
+        }
+        
+        if (!sanityOrder && chargeId) {
+          sanityOrder = await backendClient.fetch(`*[_type == "order" && orderNumber == $chargeId][0]`, { chargeId });
+        }
 
         if (sanityOrder && sanityOrder._id) {
           if (sanityOrder.status === "paid") {
@@ -65,8 +95,8 @@ export async function POST(req: NextRequest) {
             .set({
               status: "paid",
               paychangu: {
-                chargeId: paymentData.charge_id,
-                refId: paymentData.ref_id,
+                chargeId: chargeId,
+                refId: txRef || chargeId,
                 amount: paymentData.amount,
                 mobile: paymentData.mobile,
                 mobileMoneyProvider: paymentData.mobile_money?.name,
@@ -77,22 +107,22 @@ export async function POST(req: NextRequest) {
               }
             })
             .commit();
-          console.log("📦 Sanity Order Update Result: SUCCESS");
+            console.log("📦 Sanity Order Update Result: SUCCESS");
 
-          if (sanityOrder.products && Array.isArray(sanityOrder.products)) {
-            for (const item of sanityOrder.products) {
-              if (item.product && item.product._ref && item.quantity) {
-                const productRef = item.product._ref;
-                const qty = Number(item.quantity);
-                const productDoc = await backendClient.getDocument(productRef);
-                if (productDoc && typeof productDoc.stock === "number") {
-                  const newStock = Math.max((productDoc.stock as number) - qty, 0);
-                  await backendClient.patch(productRef).set({ stock: newStock }).commit();
-                  console.log(`✅ Decremented stock for product ${productRef} to ${newStock}`);
+            if (sanityOrder.products && Array.isArray(sanityOrder.products)) {
+              for (const item of sanityOrder.products) {
+                if (item.product && item.product._ref && item.quantity) {
+                  const productRef = item.product._ref;
+                  const qty = Number(item.quantity);
+                  const productDoc = await backendClient.getDocument(productRef);
+                  if (productDoc && typeof productDoc.stock === "number") {
+                    const newStock = Math.max((productDoc.stock as number) - qty, 0);
+                    await backendClient.patch(productRef).set({ stock: newStock }).commit();
+                    console.log(`✅ Decremented stock for product ${productRef} to ${newStock}`);
+                  }
                 }
               }
             }
-          }
           } // close the else block for status === "paid"
         } else {
           console.error("❌ Sanity order not found for chargeId:", chargeId);

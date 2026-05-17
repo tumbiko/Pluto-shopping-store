@@ -31,13 +31,13 @@ const ProductGrid = () => {
       }`;
 
       try {
-        const response = await client.fetch(query, { selected });
+        const response = await client.withConfig({ useCdn: false }).fetch(query, { selected });
         console.log('ProductGrid fetch result:', response?.length, 'for tab:', selectedTab);
         if (!mounted) return;
 
         if ((!response || response.length === 0) && selected !== 'all') {
           console.warn('No products for selected filter — fetching all as fallback');
-          const all = await client.fetch(`*[_type == "product"]{..., "categories": categories[]->title} | order(name desc)`);
+          const all = await client.withConfig({ useCdn: false }).fetch(`*[_type == "product"]{..., "categories": categories[]->title} | order(name desc)`);
           if (!mounted) return;
           setProducts(all || []);
         } else {

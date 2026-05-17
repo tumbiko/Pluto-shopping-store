@@ -27,6 +27,9 @@ export async function POST(req: NextRequest) {
 
     const { items, metadata, ...payChanguPayload } = body;
 
+    // We generate a local orderNumber to identify the order initially
+    const localOrderNumber = metadata?.orderNumber;
+
     if (items && metadata) {
       try {
         const { createOrderInPostgres } = await import("@/Actions/createOrderInPostgres");
@@ -35,7 +38,7 @@ export async function POST(req: NextRequest) {
           createOrderInPostgres(items, metadata),
           createOrderInSanity(items, metadata)
         ]);
-        console.log("✅ Pending order created in Postgres and Sanity");
+        console.log("✅ Pending order created in Postgres and Sanity with local orderNumber:", localOrderNumber);
       } catch (e) {
         console.error("❌ Error creating pending order in DBs:", e);
       }
@@ -67,6 +70,28 @@ export async function POST(req: NextRequest) {
 
     if (!chargeId) {
       console.warn("⚠️ PayChangu returned no charge_id");
+    } else if (localOrderNumber) {
+      // ✅ UPDATE the pending order with the real PayChangu chargeId!
+      try {
+        const prisma = (await import("@/lib/prisma")).default;
+        const { backendClient } = await import("@/sanity/lib/backendClient");
+        
+        await prisma.order.update({
+          where: { orderNumber: localOrderNumber },
+          data: { payChanguChargeId: String(chargeId) }
+        });
+        
+        const sanityOrder = await backendClient.fetch(
+          `*[_type == "order" && orderNumber == $localOrderNumber][0]`,
+          { localOrderNumber }
+        );
+        if (sanityOrder?._id) {
+          await backendClient.patch(sanityOrder._id).set({ paychangu: { chargeId: String(chargeId) } }).commit();
+        }
+        console.log(`✅ Updated pending order ${localOrderNumber} with PayChangu charge_id: ${chargeId}`);
+      } catch (err) {
+        console.error("❌ Failed to update pending order with real charge_id:", err);
+      }
     }
 
     return NextResponse.json(
