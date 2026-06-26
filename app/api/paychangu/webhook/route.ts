@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { backendClient } from "@/sanity/lib/backendClient";
 import { createOrderInSanity as createOrderInSanityImported } from "@/Actions/CreateOrderInSanity";
+import prisma from "@/lib/prisma";
 
 type OrderProductItem = {
   product?: { _ref?: string } | null;
@@ -182,6 +183,45 @@ function extractItemsAndMetadataFromVerify(verifyData: unknown): {
   return { items: mapped.length ? mapped : undefined, metadata };
 }
 
+async function syncToPostgres(
+  txRef: string | undefined,
+  chargeId: string | undefined,
+  amount: unknown
+) {
+  try {
+    console.log(`${LOG_PREFIX} [Postgres Sync] Starting sync for txRef=${txRef}, chargeId=${chargeId}`);
+    let pgOrder = null;
+    if (txRef) {
+      pgOrder = await prisma.order.findUnique({ where: { orderNumber: String(txRef) } });
+    }
+    if (!pgOrder && chargeId) {
+      pgOrder = await prisma.order.findFirst({ where: { payChanguChargeId: chargeId } });
+    }
+    if (!pgOrder && chargeId) {
+      pgOrder = await prisma.order.findUnique({ where: { orderNumber: chargeId } });
+    }
+
+    if (pgOrder) {
+      await prisma.order.update({
+        where: { id: pgOrder.id },
+        data: {
+          status: "paid",
+          payChanguStatus: "verified",
+          payChanguChargeId: chargeId,
+          payChanguTransactionId: txRef || chargeId,
+          payChanguAmount: typeof amount === "number" ? amount : Number(amount ?? 0),
+          payChanguVerified: true,
+        }
+      });
+      console.log(`${LOG_PREFIX} [Postgres Sync] Successfully updated order ${pgOrder.orderNumber} to paid`);
+    } else {
+      console.warn(`${LOG_PREFIX} [Postgres Sync] Postgres order not found for txRef=${txRef}, chargeId=${chargeId}`);
+    }
+  } catch (err) {
+    console.error(`${LOG_PREFIX} [Postgres Sync] Error updating Postgres order:`, err);
+  }
+}
+
 /**
  * Upsert order in Sanity using `charge_id` as orderNumber (the canonical key)
  */
@@ -280,6 +320,8 @@ async function upsertOrderFromVerification(verifyData: unknown) {
       );
     }
 
+    await syncToPostgres(txRef, chargeId, amount);
+
     return { updated: true, orderId: existingOrder._id };
   } else {
     console.log(`${LOG_PREFIX} [upsertOrderFromVerification] No existing order for ${chargeId}. Creating new order.`);
@@ -342,6 +384,8 @@ async function upsertOrderFromVerification(verifyData: unknown) {
           console.error(`${LOG_PREFIX} [upsertOrderFromVerification] Error patching paychangu on created order:`, err);
         }
 
+        await syncToPostgres(txRef, chargeId, amount);
+
         return { created: true, orderId: createdId ?? null };
       } else {
         // fallback: minimal order
@@ -361,6 +405,9 @@ async function upsertOrderFromVerification(verifyData: unknown) {
         console.log(`${LOG_PREFIX} [upsertOrderFromVerification] Creating minimal order (no items).`);
         const created = await backendClient.create(newOrder);
         console.log(`${LOG_PREFIX} [upsertOrderFromVerification] Created minimal order:`, (created as { _id?: string })._id);
+        
+        await syncToPostgres(txRef, chargeId, amount);
+        
         return { created: true, orderId: (created as { _id?: string })._id ?? null };
       }
     } catch (err) {

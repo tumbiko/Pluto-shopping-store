@@ -125,9 +125,8 @@ const SuccessPageContent = () => {
             {Array.from({ length: MAX_POLLS }).map((_, i) => (
               <div
                 key={i}
-                className={`w-2 h-2 rounded-full transition-colors ${
-                  i < pollCount ? "bg-yellow-400" : "bg-gray-600"
-                }`}
+                className={`w-2 h-2 rounded-full transition-colors ${i < pollCount ? "bg-yellow-400" : "bg-gray-600"
+                  }`}
               />
             ))}
           </div>
@@ -148,9 +147,8 @@ const SuccessPageContent = () => {
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
           transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-          className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg ${
-            paymentStatus === "timeout" ? "bg-yellow-500" : "bg-green-500"
-          }`}
+          className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg ${paymentStatus === "timeout" ? "bg-yellow-500" : "bg-green-500"
+            }`}
         >
           {paymentStatus === "timeout" ? (
             <Clock className="text-white w-10 h-10" />
