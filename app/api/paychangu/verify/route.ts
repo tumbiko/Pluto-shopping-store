@@ -41,7 +41,7 @@ if (data.data?.status === "success" || data.status === "successful") {
     // Use Vercel app URL in production, fallback to localhost for dev
     const siteUrl =
       process.env.NODE_ENV === "production"
-        ? "https://lutoshoppingstore.vercel.app"
+        ? "https://pluto-shopping-store.vercel.app"
         : process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
     console.log("🌐 Triggering webhook at:", `${siteUrl}/api/webhook`);
