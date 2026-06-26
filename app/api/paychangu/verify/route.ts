@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
-import { backendClient } from "@/sanity/lib/backendClient";
 
 export async function GET(req: NextRequest) {
   try {
@@ -37,102 +35,27 @@ export async function GET(req: NextRequest) {
     const data = await res.json();
     console.log("🔍 PayChangu VERIFY response:", data);
 
-    const statusLower = (data.data?.status || data.status || "").toLowerCase();
-    const isPaid = statusLower === "success" || statusLower === "successful" || statusLower === "verified";
-
-    // ✅ If payment successful, update Postgres and Sanity directly
-    if (isPaid) {
+    // ✅ If payment successful, call your webhook to update stock
+    if (data.data?.status === "success" || data.status === "successful") {
       try {
-        const paymentData = data.data || data;
-        const finalChargeId = paymentData.charge_id ? String(paymentData.charge_id) : charge_id;
-        const txRef = paymentData.ref_id || paymentData.tx_ref || paymentData.txRef;
+        // Use Vercel app URL in production, fallback to localhost for dev
+        const siteUrl =
+          process.env.NODE_ENV === "production"
+            ? "https://pluto-shopping-store.vercel.app"
+            : process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
-        console.log(`💾 Direct update for verified payment — finalChargeId: ${finalChargeId}, txRef: ${txRef}`);
-
-        // 1. Try to find the Postgres order
-        let pgOrder = null;
-        if (txRef) {
-          pgOrder = await prisma.order.findUnique({ where: { orderNumber: String(txRef) } });
-        }
-        if (!pgOrder && finalChargeId) {
-          pgOrder = await prisma.order.findFirst({ where: { payChanguChargeId: finalChargeId } });
-        }
-        if (!pgOrder && finalChargeId) {
-          pgOrder = await prisma.order.findUnique({ where: { orderNumber: finalChargeId } });
-        }
-
-        if (pgOrder) {
-          await prisma.order.update({
-            where: { id: pgOrder.id },
-            data: {
-              status: "paid",
-              payChanguStatus: "verified",
-              payChanguChargeId: finalChargeId,
-              payChanguTransactionId: txRef || finalChargeId,
-              payChanguAmount: paymentData.amount ? Number(paymentData.amount) : null,
-              payChanguVerified: true,
-            }
-          });
-          console.log(`✅ Postgres order ${pgOrder.orderNumber} directly updated to paid`);
-        } else {
-          console.error(`❌ Postgres update error: Could not find matching order for finalChargeId: ${finalChargeId}, txRef: ${txRef}`);
-        }
-
-        // 2. Try to update the Sanity order
-        let sanityOrder = null;
-        if (txRef) {
-          sanityOrder = await backendClient.fetch(`*[_type == "order" && orderNumber == $txRef][0]`, { txRef: String(txRef) });
-        }
-        if (!sanityOrder && finalChargeId) {
-          sanityOrder = await backendClient.fetch(`*[_type == "order" && paychangu.chargeId == $finalChargeId][0]`, { finalChargeId });
-        }
-        if (!sanityOrder && finalChargeId) {
-          sanityOrder = await backendClient.fetch(`*[_type == "order" && orderNumber == $finalChargeId][0]`, { finalChargeId });
-        }
-
-        if (sanityOrder && sanityOrder._id) {
-          if (sanityOrder.status === "paid") {
-            console.log("⚠️ Sanity order is already marked as paid. Skipping stock deduction.");
-          } else {
-            await backendClient.patch(sanityOrder._id)
-              .set({
-                status: "paid",
-                paychangu: {
-                  chargeId: finalChargeId,
-                  refId: txRef || finalChargeId,
-                  amount: paymentData.amount,
-                  mobile: paymentData.mobile,
-                  mobileMoneyProvider: paymentData.mobile_money?.name,
-                  transactionCharges: paymentData.transaction_charges,
-                  status: "verified",
-                  verified: true,
-                  completedAt: paymentData.completed_at || new Date().toISOString(),
-                }
-              })
-              .commit();
-            console.log("📦 Sanity Order Update: SUCCESS");
-
-            // Decrement product stock levels
-            if (sanityOrder.products && Array.isArray(sanityOrder.products)) {
-              for (const item of sanityOrder.products) {
-                if (item.product && item.product._ref && item.quantity) {
-                  const productRef = item.product._ref;
-                  const qty = Number(item.quantity);
-                  const productDoc = await backendClient.getDocument(productRef) as any;
-                  if (productDoc && typeof productDoc.stock === "number") {
-                    const newStock = Math.max(productDoc.stock - qty, 0);
-                    await backendClient.patch(productRef).set({ stock: newStock }).commit();
-                    console.log(`✅ Decremented stock for product ${productRef} to ${newStock}`);
-                  }
-                }
-              }
-            }
-          }
-        } else {
-          console.error(`❌ Sanity order not found for finalChargeId: ${finalChargeId}, txRef: ${txRef}`);
-        }
+        console.log("🌐 Triggering webhook at:", `${siteUrl}/api/webhook`);
+        await fetch(`${siteUrl}/api/webhook`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-webhook-signature": process.env.PAYCHANGU_WEBHOOK_SECRET || "",
+          },
+          body: JSON.stringify({ order: data.data }), // send full order data
+        });
+        console.log("✅ Webhook triggered successfully");
       } catch (err) {
-        console.error("❌ Error performing direct updates in verify route:", err);
+        console.error("❌ Error triggering webhook:", err);
       }
     }
 
