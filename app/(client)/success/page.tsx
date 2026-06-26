@@ -2,9 +2,9 @@
 
 import useStore from "@/store";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { Check, Home, Package, ShoppingBag } from "lucide-react";
+import { Check, Home, Package, ShoppingBag, Clock } from "lucide-react";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 
@@ -24,8 +24,12 @@ export type PayChanguTransaction = {
 
 type VerifyResponse = {
   ok: boolean;
+  status?: string;
   data?: PayChanguTransaction | null;
 };
+
+const MAX_POLLS = 12;       // Poll up to 12 times
+const POLL_INTERVAL_MS = 5000; // Every 5 seconds = up to 60 seconds total
 
 const SuccessPageContent = () => {
   const { resetCart } = useStore();
@@ -35,37 +39,99 @@ const SuccessPageContent = () => {
   const [transactionData, setTransactionData] =
     useState<PayChanguTransaction | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pollCount, setPollCount] = useState(0);
+  const [paymentStatus, setPaymentStatus] = useState<"polling" | "paid" | "timeout">("polling");
 
-  // Reset cart if payment is successful
+  const pollCountRef = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Reset cart once
   useEffect(() => {
     if (chargeId) resetCart();
   }, [chargeId, resetCart]);
 
-  // Fetch transaction data
+  // Poll verify endpoint until payment confirmed or timeout
   useEffect(() => {
-    const fetchTransaction = async () => {
-      if (!chargeId) return;
+    if (!chargeId) {
+      setLoading(false);
+      return;
+    }
 
+    const poll = async () => {
       try {
         const res = await fetch(`/api/paychangu/verify?charge_id=${chargeId}`);
         const data: VerifyResponse = await res.json();
-        console.log("📤 PayChangu transaction data:", data);
+        console.log(`📤 Poll #${pollCountRef.current + 1} — status:`, data.status, data);
 
-        setTransactionData(data.data ?? null);
+        const isPaid =
+          data.status === "success" ||
+          data.status === "successful" ||
+          data.status === "verified";
+
+        if (isPaid) {
+          // ✅ Payment confirmed
+          setTransactionData(data.data ?? null);
+          setPaymentStatus("paid");
+          setLoading(false);
+          return; // Stop polling
+        }
+
+        pollCountRef.current += 1;
+        setPollCount(pollCountRef.current);
+
+        if (pollCountRef.current >= MAX_POLLS) {
+          // Timed out — show what we have
+          setTransactionData(data.data ?? null);
+          setPaymentStatus("timeout");
+          setLoading(false);
+          return;
+        }
+
+        // Schedule next poll
+        timerRef.current = setTimeout(poll, POLL_INTERVAL_MS);
       } catch (err) {
-        console.error("Error fetching transaction data:", err);
-      } finally {
-        setLoading(false);
+        console.error("Error polling payment status:", err);
+        pollCountRef.current += 1;
+        if (pollCountRef.current < MAX_POLLS) {
+          timerRef.current = setTimeout(poll, POLL_INTERVAL_MS);
+        } else {
+          setLoading(false);
+          setPaymentStatus("timeout");
+        }
       }
     };
 
-    fetchTransaction();
+    // Start first poll after a short delay (give PayChangu time to process)
+    timerRef.current = setTimeout(poll, 3000);
+
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, [chargeId]);
 
   if (loading) {
+    const secondsElapsed = pollCount * (POLL_INTERVAL_MS / 1000);
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-900">
-        <Loader2 className="w-16 h-16 text-white animate-spin" />
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 gap-6 px-4">
+        <Loader2 className="w-16 h-16 text-yellow-400 animate-spin" />
+        <div className="text-center">
+          <p className="text-white text-xl font-semibold mb-2">Confirming your payment...</p>
+          <p className="text-gray-400 text-sm">
+            {pollCount === 0
+              ? "Waiting for PayChangu to process your mobile money payment..."
+              : `Still checking... (${secondsElapsed}s elapsed)`}
+          </p>
+          <div className="flex justify-center gap-1 mt-4">
+            {Array.from({ length: MAX_POLLS }).map((_, i) => (
+              <div
+                key={i}
+                className={`w-2 h-2 rounded-full transition-colors ${
+                  i < pollCount ? "bg-yellow-400" : "bg-gray-600"
+                }`}
+              />
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -82,14 +148,29 @@ const SuccessPageContent = () => {
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
           transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-          className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg"
+          className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg ${
+            paymentStatus === "timeout" ? "bg-yellow-500" : "bg-green-500"
+          }`}
         >
-          <Check className="text-white w-10 h-10" />
+          {paymentStatus === "timeout" ? (
+            <Clock className="text-white w-10 h-10" />
+          ) : (
+            <Check className="text-white w-10 h-10" />
+          )}
         </motion.div>
 
         <h1 className="text-3xl font-bold text-white mb-4">
-          Payment Successful!
+          {paymentStatus === "timeout"
+            ? "Payment Processing..."
+            : "Payment Successful!"}
         </h1>
+
+        {paymentStatus === "timeout" && (
+          <p className="text-yellow-300 text-sm bg-yellow-900/30 rounded-lg px-4 py-3 -mt-4">
+            Your payment was submitted. Mobile money payments can take a minute to confirm.
+            Check your Orders page in a moment — it will update automatically once confirmed.
+          </p>
+        )}
 
         {/* Details */}
         <div className="space-y-4 mb-4 text-left text-gray-300">
@@ -101,7 +182,7 @@ const SuccessPageContent = () => {
           <p>
             Order Number:{" "}
             <span className="text-white font-semibold">
-              {transactionData?.charge_id ?? "N/A"}
+              {transactionData?.charge_id ?? chargeId ?? "N/A"}
             </span>
           </p>
 
@@ -144,7 +225,7 @@ const SuccessPageContent = () => {
           </Link>
 
           <Link
-            href="/orders"
+            href="/trackdelivery"
             className="flex items-center justify-center px-4 py-3 font-semibold bg-green-600 text-white rounded-lg hover:bg-green-500 transition-all duration-300 shadow-md"
           >
             <Package className="w-5 h-5 mr-2" /> Orders
